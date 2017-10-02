@@ -67,6 +67,8 @@ module detector_data_types
      real, dimension(:,:), allocatable :: k
      !! RK update destination vector (size dim)
      real, dimension(:), allocatable :: update_vector
+     !!!Chris hack
+     real :: chris
      !! Have we completed the search?
      logical :: search_complete
      !! Pointers for detector linked lists
@@ -76,7 +78,7 @@ module detector_data_types
 
   ! Parameters for lagrangian detector movement
   type rk_gs_parameters
-    ! Runk-Kutta Guided Search parameters
+    ! Runge-Kutta Guided Search parameters
     integer :: n_stages, n_subcycles
     real, allocatable, dimension(:) :: timestep_weights
     real, allocatable, dimension(:) :: timestep_nodes

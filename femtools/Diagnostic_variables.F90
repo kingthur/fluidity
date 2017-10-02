@@ -1373,7 +1373,7 @@ contains
     type(element_type), pointer :: shape
     real, dimension(xfield%dim+1) :: lcoords
     integer :: element
-
+    real :: chris !!!chris hack
     shape=>ele_shape(xfield,1)
     assert(xfield%dim+1==local_coord_count(shape))
 
@@ -1409,6 +1409,10 @@ contains
     detector%local_coords=lcoords
     detector%type=type
     detector%id_number=id
+    
+!!!chris hack (real thing will have to be allocated/allocatable)
+    chris=9.0
+    detector%chris=chris
 
   end subroutine create_single_detector
   
@@ -1730,6 +1734,17 @@ contains
           write(default_stat%detector_list%output_unit, '(a)') trim(buffer)
           column=column+xfield%dim   ! xfield%dim == size(detector%position)
        end do positionloop
+       
+       !chris hack output for chris
+       
+       chrisloop: do i=1,default_stat%detector_list%total_num_det
+          buffer=field_tag(name=default_stat%detector_list%detector_names(i), column=column+1,&
+               statistic="chris")
+          write(default_stat%detector_list%output_unit, '(a)')trim(buffer)
+          column=column+1
+       end do chrisloop
+
+       !end chris hack
      end if
 
      ! Loop over all fields in state and record the ones we want to output
@@ -2624,6 +2639,22 @@ contains
           detector => detector%next
        end do positionloop
 
+       !!!chris hack
+       detector => detector_list%first
+       chrisloop: do i=1,detector_list%length
+          if(detector_list%binary_output) then
+             write(detector_list%output_unit) detector%chris
+          else
+             format_buffer=reals_format(1)
+             write(detector_list%output_unit, format_buffer, advance="no") &
+                  detector%chris 
+          end if
+          detector => detector%next
+
+       end do chrisloop
+       !!!end chris hack
+          
+
        phaseloop: do phase=1,size(state)
           if (size(detector_list%sfield_list(phase)%ptr)>0) then
              do i=1, size(detector_list%sfield_list(phase)%ptr)
@@ -2756,6 +2787,8 @@ contains
     number_total_columns = 2 + &
                            ! Detector coordinates
                          & detector_list%total_num_det * dim + &
+                           ! Chris hack
+                         & detector_list%total_num_det + &
                            ! Scalar detector data
                          & detector_list%total_num_det * detector_list%num_sfields + &
                            ! Vector detector data
@@ -2772,11 +2805,13 @@ contains
         
       call mpi_file_write_at(detector_list%mpi_fh, location_to_write + realsize, dt, 1, getpreal(), MPI_STATUS_IGNORE, ierror)
       assert(ierror == MPI_SUCCESS)
+      
     end if
     location_to_write = location_to_write + 2 * realsize
 
     node => detector_list%first
-    position_loop: do i = 1, detector_list%length
+
+      position_loop: do i = 1, detector_list%length
       ! Output detector coordinates
       assert(size(node%position) == dim)  
     
@@ -2789,6 +2824,20 @@ contains
     assert(.not. associated(node))
     location_to_write = location_to_write + detector_list%total_num_det * dim * realsize
 
+
+    !!chris hack
+    node => detector_list%first
+      chris_loop: do i = 1, detector_list%length
+      offset = location_to_write + (node%id_number - 1) * realsize
+
+      call mpi_file_write_at(detector_list%mpi_fh, offset, node%chris, 1, getpreal(), MPI_STATUS_IGNORE, ierror)
+      assert(ierror == MPI_SUCCESS)
+      node => node%next
+    end do chris_loop
+    assert(.not. associated(node))
+    location_to_write = location_to_write + detector_list%total_num_det * realsize
+    !!!end chris hack
+    
     allocate(vvalue(dim))
     state_loop: do phase = 1, size(state)
 
