@@ -304,7 +304,15 @@ start =
                element move_with_mesh {
                   empty
                }?,
-               lagrangian_timestepping?
+               lagrangian_timestepping?,
+	       ##Interface for interacting with detector attributes
+	       element detector_attributes {
+	          ## Number of attributes to be tracked
+		  element attribute_dimensions {
+		     integer
+		  }
+	       }?
+	       
             }?, 
             ## Options to create even more output in the logs:
             ##
@@ -2621,7 +2629,15 @@ lagrangian_timestepping =
          )
       }
    )
-
+detector_attributes = 
+   (
+      element detector_attributes {
+         ## Number of attributes to be tracked
+         element attribute_dimensions {
+            integer
+         }
+      }
+   )
 # Default child of diagnostic scalar field
 diagnostic_scalar_field =
    (

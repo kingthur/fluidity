@@ -93,9 +93,9 @@ module detector_tools
 
 contains 
 
-  subroutine detector_allocate_from_params(new_detector, ndims, local_coord_count)
+  subroutine detector_allocate_from_params(new_detector, ndims, local_coord_count, attribute_dims)
     type(detector_type),  pointer, intent(out) :: new_detector
-    integer, intent(in) :: ndims, local_coord_count
+    integer, intent(in) :: ndims, local_coord_count, attribute_dims
       
     assert(.not. associated(new_detector))
       
@@ -105,6 +105,7 @@ contains
     end if
     allocate(new_detector%position(ndims))
     allocate(new_detector%local_coords(local_coord_count))
+    allocate(new_detector%attributes(attribute_dims))
       
     assert(associated(new_detector))
       
@@ -114,13 +115,14 @@ contains
     type(detector_type), pointer, intent(in) :: old_detector
     type(detector_type),  pointer, intent(out) :: new_detector
       
-    integer :: ndims, local_coord_count
+    integer :: ndims, local_coord_count, attribute_dims
       
     ndims = size(old_detector%position)
     local_coord_count = size(old_detector%local_coords)
+    attribute_dims = size(old_detector%attributes)
       
     ! allocate the memory for the new detector
-    call detector_allocate_from_params(new_detector, ndims, local_coord_count)
+    call detector_allocate_from_params(new_detector, ndims, local_coord_count, attribute_dims)
       
   end subroutine detector_allocate_from_detector
     
@@ -133,6 +135,9 @@ contains
        end if
        if(allocated(detector%position)) then
           deallocate(detector%position)
+       end if
+       if(allocated(detector%attributes)) then
+          deallocate(detector%attributes)
        end if
        if(allocated(detector%k)) then
           deallocate(detector%k)
@@ -192,6 +197,7 @@ contains
     new_detector%type = old_detector%type
     new_detector%name = old_detector%name
     new_detector%local_coords=old_detector%local_coords
+    new_detector%attributes=old_detector%attributes
       
   end subroutine detector_copy
 
@@ -298,34 +304,37 @@ contains
 
   end subroutine delete_all_detectors
 
-  function detector_buffer_size(ndims, have_update_vector, nstages)
+  function detector_buffer_size(ndims,attribute_dims, have_update_vector, nstages)
     ! Returns the number of reals we need to pack a detector
-    integer, intent(in) :: ndims
+    integer, intent(in) :: ndims, attribute_dims !chris hack
     logical, intent(in) :: have_update_vector
     integer, intent(in), optional :: nstages
     integer :: detector_buffer_size
 
     if (have_update_vector) then
        assert(present(nstages))
-       detector_buffer_size=(nstages+2)*ndims+4 !!chris hacks, was +3
+       detector_buffer_size=(nstages+2)*ndims+3+attribute_dims !!chris hacks, was +3
     else
-       detector_buffer_size=ndims+5 !!was +4
+       detector_buffer_size=ndims+4+attribute_dims !!was +4
     end if
 
   end function detector_buffer_size
 
-  subroutine pack_detector(detector,buff,ndims,nstages)
+  subroutine pack_detector(detector,buff,ndims,attribute_dims,nstages)
     ! Packs (serialises) detector into buff
     ! Basic fields are: element, position, id_number and type
     ! If nstages is given, the detector is still moving
     ! and we also pack update_vector and k
     type(detector_type), pointer, intent(in) :: detector
     real, dimension(:), intent(out) :: buff
-    integer, intent(in) :: ndims
+    integer, intent(in) :: ndims, attribute_dims !chris hack
     integer, intent(in), optional :: nstages
 
     assert(size(detector%position)==ndims)
-    assert(size(buff)>=ndims+4) !!chris hack was +3
+    if (have_option("/io/detectors/detector_attributes")) then
+       assert(size(detector%attributes)==attribute_dims)
+    end if
+    assert(size(buff)>=ndims+3+attribute_dims) !!chris hack was +3
 
     ! Basic fields: ndims+3
     buff(1:ndims) = detector%position
@@ -334,48 +343,55 @@ contains
     buff(ndims+3) = detector%type
 
     !!chris hack
-    buff(ndims+4) = detector%chris
+    if (have_option("/io/detectors/detector_attributes")) then
+       buff(ndims+4:ndims+3+attribute_dims) = detector%attributes
+    end if
 
     ! Lagrangian advection fields: (nstages+1)*ndims
     if (present(nstages)) then
-       ewrite(2,*) "Buffer size is", size(buff)
-       assert(size(buff)==(nstages+2)*ndims+4) !! was +3
+      ! ewrite(2,*) "Buffer size is", size(buff) !!chris hack
+       assert(size(buff)==(nstages+2)*ndims+3+attribute_dims) !! was +3
        assert(allocated(detector%update_vector))
        assert(allocated(detector%k))
 
-       buff(ndims+5:2*ndims+4) = detector%update_vector !! was +4 and +3
-       buff(2*ndims+5:(nstages+2)*ndims+4) = reshape(detector%k,(/nstages*ndims/)) !!was +4 and +3
+       buff(ndims+attribute_dims+4:2*ndims+attribute_dims+3) = detector%update_vector !! was +4 and +3
+       buff(2*ndims+4+attribute_dims:(nstages+2)*ndims+3+attribute_dims) = reshape(detector%k,(/nstages*ndims/)) !!was +4 and +3
     else
-       assert(size(buff)==ndims+5) !! was +4
-       buff(ndims+5) = detector%list_id !! was +4
+       assert(size(buff)==ndims+4+attribute_dims) !! was +4
+       buff(ndims+4+attribute_dims) = detector%list_id !! was +4
     end if
-    
   end subroutine pack_detector
 
-  subroutine unpack_detector(detector,buff,ndims,global_to_local,coordinates,nstages)
+  subroutine unpack_detector(detector,buff,ndims,attribute_dims,global_to_local,coordinates,nstages)
     ! Unpacks the detector from buff and fills in the blanks
     type(detector_type), pointer :: detector
     real, dimension(:), intent(in) :: buff
-    integer, intent(in) :: ndims
+    integer, intent(in) :: ndims,attribute_dims !chris hack
     type(integer_hash_table), intent(in), optional :: global_to_local
     type(vector_field), intent(in), optional :: coordinates
     integer, intent(in), optional :: nstages    
 
-    assert(size(buff)>=ndims+4) !!chris hack was +3
-
+    assert(size(buff)>=ndims+3+attribute_dims) !!chris hack was +3
     if (.not. allocated(detector%position)) then
        allocate(detector%position(ndims))
     end if
-
+    if (.not. allocated(detector%attributes)) then
+       allocate(detector%attributes(attribute_dims))
+    end if
     ! Basic fields: ndims+3
     detector%position = reshape(buff(1:ndims),(/ndims/))
     detector%element = buff(ndims+1)
     detector%id_number = buff(ndims+2)
     detector%type = buff(ndims+3)
-
     !chris hack
-    detector%chris = buff(ndims+4)
-
+    if (have_option("/io/detectors/detector_attributes")) then
+       if (attribute_dims==1) then
+          detector%attributes = buff(ndims+4)
+       else
+          detector%attributes = reshape(buff(ndims+4:ndims+3+attribute_dims),(/attribute_dims/))
+          !buff(ndims+4:ndims+3+attribute_dims)
+       end if
+    end if
     ! Reconstruct element number if global-to-local mapping is given
     if (present(global_to_local)) then
        assert(has_key(global_to_local, detector%element))
@@ -389,32 +405,30 @@ contains
           detector%local_coords=local_coords(coordinates,detector%element,detector%position)
        end if
     end if
-
     ! Lagrangian advection fields: (nstages+1)*ndims
     if (present(nstages)) then
-       assert(size(buff)==(nstages+2)*ndims+4)!!was +3
+       assert(size(buff)==(nstages+2)*ndims+3+attribute_dims)!!was +3
 
        ! update_vector, dimension(ndim)
        if (.not. allocated(detector%update_vector)) then
           allocate(detector%update_vector(ndims))
        end if       
-       detector%update_vector = reshape(buff(ndims+5:2*ndims+4),(/ndims/))!!was +4 and +3
+       detector%update_vector = reshape(buff(ndims+4+attribute_dims:2*ndims+3+attribute_dims),(/ndims/))!!was +4 and +3
 
        ! k, dimension(nstages:ndim)
        if (.not. allocated(detector%k)) then
           allocate(detector%k(nstages,ndims))
        end if  
-       detector%k = reshape(buff(2*ndims+5:(nstages+2)*ndims+4),(/nstages,ndims/))!!was +4 and +3
+       detector%k = reshape(buff(2*ndims+4+attribute_dims:(nstages+2)*ndims+3+attribute_dims),(/nstages,ndims/))!!was +4 and +3
 
        ! If update_vector still exists, we're not done moving
        detector%search_complete=.false.
     else
-       assert(size(buff)==ndims+5)!!was +4
+       assert(size(buff)==ndims+4+attribute_dims)!!was +4
 
-       detector%list_id = buff(ndims+5)!!was +4
+       detector%list_id = buff(ndims+4+attribute_dims)!!was +4
        detector%search_complete=.true.
     end if
-   
   end subroutine unpack_detector
 
   function detector_value_scalar(sfield, detector) result(value)

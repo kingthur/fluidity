@@ -63,15 +63,12 @@ contains
     ewrite(2, *) "New picker ID: ", picker%picker_id
     
     if(present(name)) then
-      call set_picker_name(picker, name)
+       call set_picker_name(picker, name)
     else
-      call set_picker_name(picker, empty_name)
+       call set_picker_name(picker, empty_name)
     end if
-
     picker%last_mesh_movement = eventcount(EVENT_MESH_MOVEMENT)
-      
-    call addref(picker)
-           
+    call addref(picker)   
   end subroutine allocate_picker
 
   subroutine initialise_picker(positions)

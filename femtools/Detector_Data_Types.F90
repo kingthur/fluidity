@@ -68,7 +68,7 @@ module detector_data_types
      !! RK update destination vector (size dim)
      real, dimension(:), allocatable :: update_vector
      !!!Chris hack
-     real :: chris
+     real, dimension(:), allocatable :: attributes
      !! Have we completed the search?
      logical :: search_complete
      !! Pointers for detector linked lists

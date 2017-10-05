@@ -1360,20 +1360,20 @@ contains
 
   end subroutine initialise_steady_state
 
-  subroutine create_single_detector(detector_list,xfield,position,id,type,name)
+  subroutine create_single_detector(detector_list,xfield,position,attribute_dims,id,type,name)! chris hack, add attribute dims parameter
     ! Allocate a single detector, populate and insert it into the given list
     ! In parallel, first check if the detector would be local and only allocate if it is
     type(detector_linked_list), intent(inout) :: detector_list
     type(vector_field), pointer :: xfield
     real, dimension(xfield%dim), intent(in) :: position
-    integer, intent(in) :: id, type
+    integer, intent(in) :: id, type, attribute_dims !chris hack
     character(len=*), intent(in) :: name
 
     type(detector_type), pointer :: detector
     type(element_type), pointer :: shape
     real, dimension(xfield%dim+1) :: lcoords
-    integer :: element
-    real :: chris !!!chris hack
+    integer :: element, i !chris hack
+    real, dimension(attribute_dims) :: attributes !!!chris hack, need to read in dimensions/have dims set from python
     shape=>ele_shape(xfield,1)
     assert(xfield%dim+1==local_coord_count(shape))
 
@@ -1382,7 +1382,6 @@ contains
     ! a halo of non-owned elements in your process and so you can work out
     ! ownership without communication.  But in general it won't work.
     call picker_inquire(xfield,position,element,local_coord=lcoords,global=.true.)
-
     ! If we're in parallel and don't own the element, skip this detector
     if (isparallel()) then
        if (element<0) return
@@ -1394,14 +1393,12 @@ contains
           ewrite(-1,*) "Dealing with detector ", id, " named: ", trim(name)
           FLExit("Trying to initialise detector outside of computational domain")
        end if
-    end if
-         
+    end if     
     ! Otherwise, allocate and insert detector
     allocate(detector)
     allocate(detector%position(xfield%dim))
     allocate(detector%local_coords(local_coord_count(shape)))
     call insert(detector,default_stat%detector_list)
-
     ! Populate detector
     detector%name=name
     detector%position=position
@@ -1409,11 +1406,13 @@ contains
     detector%local_coords=lcoords
     detector%type=type
     detector%id_number=id
-    
 !!!chris hack (real thing will have to be allocated/allocatable)
-    chris=9.0
-    detector%chris=chris
-
+    if (have_option("/io/detectors/detector_attributes")) then
+       allocate(detector%attributes(attribute_dims))
+       do i=1,attribute_dims
+          detector%attributes(i)=position(i)
+       end do
+    end if
   end subroutine create_single_detector
   
   subroutine initialise_detectors(filename, state)
@@ -1436,6 +1435,7 @@ contains
     real, allocatable, dimension(:) :: detector_location
     real:: current_time
     character(len = OPTION_PATH_LEN) :: detectors_cp_filename, detector_file_filename
+    integer :: attribute_dims !!chris hack
 
     type(detector_type), pointer :: detector
     type(element_type), pointer :: shape
@@ -1451,6 +1451,13 @@ contains
     lagrangian_dete = option_count("/io/detectors/lagrangian_detector")
     python_functions_or_files = option_count("/io/detectors/detector_array")
     python_dete = 0
+
+    !Chris hack - get attribute dims
+    if (have_option("/io/detectors/detector_attributes")) then
+       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
+    else
+       attribute_dims=0
+    end if
  
     do i=1,python_functions_or_files
        write(buffer, "(a,i0,a)") "/io/detectors/detector_array[",i-1,"]"
@@ -1526,7 +1533,7 @@ contains
           default_stat%detector_list%detector_names(i)=detector_name
 
           call create_single_detector(default_stat%detector_list, xfield, &
-                detector_location, i, STATIC_DETECTOR, trim(detector_name))
+                detector_location, attribute_dims, i, STATIC_DETECTOR, trim(detector_name))
        end do
 
        ! Read all single lagrangian detector from options
@@ -1543,7 +1550,7 @@ contains
           default_stat%detector_list%detector_names(static_dete+i)=detector_name
 
           call create_single_detector(default_stat%detector_list, xfield, &
-                detector_location, static_dete+i, LAGRANGIAN_DETECTOR, trim(detector_name))
+                detector_location, attribute_dims, static_dete+i, LAGRANGIAN_DETECTOR, trim(detector_name))
        end do
 
        k=static_dete+lagrangian_dete+1
@@ -1577,7 +1584,7 @@ contains
                 default_stat%detector_list%detector_names(k)=trim(detector_name)
 
                 call create_single_detector(default_stat%detector_list, xfield, &
-                       coords(:,j), k, type_det, trim(detector_name))
+                       coords(:,j), attribute_dims, k, type_det, trim(detector_name))
                 k=k+1           
              end do
              deallocate(coords)
@@ -1600,7 +1607,7 @@ contains
                 default_stat%detector_list%detector_names(k)=trim(detector_name)
                 read(default_stat%detector_file_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, k, type_det, trim(detector_name))
+                      detector_location, attribute_dims, k, type_det, trim(detector_name))
                 k=k+1          
              end do
           end if
@@ -1647,7 +1654,7 @@ contains
              if (default_stat%detector_group_names(j)==temp_name) then
                 read(default_stat%detector_checkpoint_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, i, STATIC_DETECTOR, trim(temp_name))                  
+                      detector_location, attribute_dims, i, STATIC_DETECTOR, trim(temp_name))                  
              else
                 cycle
              end if
@@ -1662,7 +1669,7 @@ contains
              if (default_stat%detector_group_names(j)==temp_name) then
                 read(default_stat%detector_checkpoint_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, i+static_dete, LAGRANGIAN_DETECTOR, trim(temp_name)) 
+                      detector_location, attribute_dims, i+static_dete, LAGRANGIAN_DETECTOR, trim(temp_name)) 
              else
                 cycle
              end if
@@ -1691,7 +1698,7 @@ contains
                    write(detector_name, fmt) trim(temp_name)//"_", m
                    read(default_stat%detector_checkpoint_unit) detector_location
                    call create_single_detector(default_stat%detector_list, xfield, &
-                          detector_location, k, type_det, trim(detector_name)) 
+                          detector_location, attribute_dims, k, type_det, trim(detector_name)) 
                    default_stat%detector_list%detector_names(k)=trim(detector_name)
                    k=k+1           
                 end do
@@ -1736,13 +1743,14 @@ contains
        end do positionloop
        
        !chris hack output for chris
-       
-       chrisloop: do i=1,default_stat%detector_list%total_num_det
-          buffer=field_tag(name=default_stat%detector_list%detector_names(i), column=column+1,&
-               statistic="chris")
-          write(default_stat%detector_list%output_unit, '(a)')trim(buffer)
-          column=column+1
-       end do chrisloop
+       if (have_option("/io/detectors/detector_attributes")) then
+          chrisloop: do i=1,default_stat%detector_list%total_num_det
+             buffer=field_tag(name=default_stat%detector_list%detector_names(i), column=column+1,&
+                  statistic="attributes",components=attribute_dims)
+             write(default_stat%detector_list%output_unit, '(a)')trim(buffer)
+             column=column+attribute_dims
+          end do chrisloop
+       end if
 
        !end chris hack
      end if
@@ -2179,7 +2187,8 @@ contains
        call move_lagrangian_detectors(state, default_stat%detector_list, dt, timestep)
     end if
 
-    ! Now output any detectors.    
+    ! Now output any detectors.
+    
     call write_detectors(state, default_stat%detector_list, time, dt)
 
     call profiler_toc("I/O")
@@ -2260,7 +2269,6 @@ contains
       
       call get_option("/timestepping/timestep", dt)
       call get_option(trim(velocity%option_path)//"/prognostic/temporal_discretisation/theta", theta)
-      
       call allocate(nl_pressure, new_pressure%mesh, "NonlinearPressure")
       call set(nl_pressure, new_pressure, old_pressure, theta)
       
@@ -2591,6 +2599,7 @@ contains
 
     character(len=10) :: format_buffer
     integer :: i, j, k, phase, ele, check_no_det, totaldet_global
+    integer :: attribute_dims !!chris hack
     real :: value
     real, dimension(:), allocatable :: vvalue
     type(scalar_field), pointer :: sfield
@@ -2598,7 +2607,11 @@ contains
     type(detector_type), pointer :: detector
 
     ewrite(1,*) "In write_detectors"
-
+    if (have_option("/io/detectors/detector_attributes")) then
+       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
+    else
+       attribute_dims=0
+    end if
     !Computing the global number of detectors. This is to prevent hanging
     !when there are no detectors on any processor
     check_no_det=1
@@ -2609,7 +2622,7 @@ contains
     if (check_no_det==0) then
        return
     end if
-
+    
     ! If isparallel() or binary output use this:
     if ((isparallel()).or.(default_stat%detector_list%binary_output)) then    
        call write_mpi_out(state,detector_list,time,dt)
@@ -2640,18 +2653,20 @@ contains
        end do positionloop
 
        !!!chris hack
-       detector => detector_list%first
-       chrisloop: do i=1,detector_list%length
-          if(detector_list%binary_output) then
-             write(detector_list%output_unit) detector%chris
-          else
-             format_buffer=reals_format(1)
-             write(detector_list%output_unit, format_buffer, advance="no") &
-                  detector%chris 
-          end if
-          detector => detector%next
-
-       end do chrisloop
+       if (have_option("/io/detectors/detector_attributes")) then
+          detector => detector_list%first
+          chrisloop: do i=1,detector_list%length
+             if(detector_list%binary_output) then
+                write(detector_list%output_unit) detector%attributes
+             else
+                format_buffer=reals_format(attribute_dims)
+                write(detector_list%output_unit, format_buffer, advance="no") &
+                     detector%attributes
+             end if
+             detector => detector%next
+             
+          end do chrisloop
+       end if
        !!!end chris hack
           
 
@@ -2761,6 +2776,7 @@ contains
     integer :: i, j, phase, ierror, number_of_scalar_det_fields, realsize, dim, procno
     integer(KIND = MPI_OFFSET_KIND) :: location_to_write, offset
     integer :: number_of_vector_det_fields, number_total_columns
+    integer :: attribute_dims !!chris hack
 
     real :: value
     real, dimension(:), allocatable :: vvalue
@@ -2783,12 +2799,20 @@ contains
 
     vfield => extract_vector_field(state, "Coordinate")
     dim = vfield%dim
+
+    if (have_option("/io/detectors/detector_attributes")) then
+       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
+    else
+       attribute_dims=0
+    end if
+
+    
                            ! Time data
     number_total_columns = 2 + &
                            ! Detector coordinates
                          & detector_list%total_num_det * dim + &
                            ! Chris hack
-                         & detector_list%total_num_det + &
+                         & detector_list%total_num_det * attribute_dims + &
                            ! Scalar detector data
                          & detector_list%total_num_det * detector_list%num_sfields + &
                            ! Vector detector data
@@ -2826,16 +2850,19 @@ contains
 
 
     !!chris hack
-    node => detector_list%first
-      chris_loop: do i = 1, detector_list%length
-      offset = location_to_write + (node%id_number - 1) * realsize
+    if (have_option("/io/detectors/detector_attributes")) then
+       node => detector_list%first
+       chris_loop: do i = 1, detector_list%length
+          assert(size(node%attributes) == attribute_dims)
+          offset = location_to_write + (node%id_number - 1) * attribute_dims * realsize
 
-      call mpi_file_write_at(detector_list%mpi_fh, offset, node%chris, 1, getpreal(), MPI_STATUS_IGNORE, ierror)
-      assert(ierror == MPI_SUCCESS)
-      node => node%next
-    end do chris_loop
-    assert(.not. associated(node))
-    location_to_write = location_to_write + detector_list%total_num_det * realsize
+          call mpi_file_write_at(detector_list%mpi_fh, offset, node%attributes, attribute_dims, getpreal(), MPI_STATUS_IGNORE, ierror)
+          assert(ierror == MPI_SUCCESS)
+          node => node%next
+       end do chris_loop
+       assert(.not. associated(node))
+       location_to_write = location_to_write + detector_list%total_num_det * attribute_dims * realsize
+    end if
     !!!end chris hack
     
     allocate(vvalue(dim))

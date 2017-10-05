@@ -375,6 +375,15 @@ The t argument is for future use only - currently detector locations are only se
             <optional>
               <ref name="lagrangian_timestepping"/>
             </optional>
+            <optional>
+              <element name="detector_attributes">
+                <a:documentation>Interface for interacting with detector attributes</a:documentation>
+                <element name="attribute_dimensions">
+                  <a:documentation>Number of attributes to be tracked</a:documentation>
+                  <ref name="integer"/>
+                </element>
+              </element>
+            </optional>
           </element>
         </optional>
         <optional>
@@ -3523,6 +3532,14 @@ guided search particle tracking</a:documentation>
           <empty/>
         </element>
       </choice>
+    </element>
+  </define>
+  <define name="detector_attributes">
+    <element name="detector_attributes">
+      <element name="attribute_dimensions">
+        <a:documentation>Number of attributes to be tracked</a:documentation>
+        <ref name="integer"/>
+      </element>
     </element>
   </define>
   <!-- Default child of diagnostic scalar field -->

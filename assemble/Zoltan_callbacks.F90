@@ -1026,10 +1026,16 @@ contains
     type(vector_field), pointer :: vfield
     type(tensor_field), pointer :: tfield
     integer :: old_universal_element_number, old_local_element_number, dataSize
+    integer :: attribute_dims !chris hack
 
     type(detector_type), pointer :: detector => null(), detector_to_delete => null()    
 
     ewrite(1,*) "In zoltan_cb_pack_fields"
+    if (have_option("/io/detectors/detector_attributes")) then
+       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
+    else
+       attribute_dims=0
+    end if
 
     total_det_packed=0
     do i=1,num_ids
@@ -1082,7 +1088,7 @@ contains
 
           ! pack the detector
           call pack_detector(detector, rbuf(rhead:rhead+zoltan_global_ndata_per_det-1), &
-               zoltan_global_ndims)
+               zoltan_global_ndims, attribute_dims)
 
           ! keep a pointer to the detector to delete
           detector_to_delete => detector
@@ -1172,12 +1178,18 @@ contains
     integer :: rhead, i, state_no, field_no, loc, sz, dataSize
     integer :: old_universal_element_number, new_local_element_number
     integer :: ndetectors_in_ele, det, new_ele_owner, total_det_unpacked
+    integer :: attribute_dims
     type(detector_type), pointer :: detector => null()
     type(element_type), pointer :: shape => null()
     
     ewrite(1,*) "In zoltan_cb_unpack_fields"
 
     total_det_unpacked=0
+    if (have_option("/io/detectors/detector_attributes")) then
+       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
+    else
+       attribute_dims=0
+    end if
     
     do i=1,num_ids
        
@@ -1243,10 +1255,10 @@ contains
           do det=1,ndetectors_in_ele
              ! allocate a detector
              shape=>ele_shape(zoltan_global_new_positions,1)
-             call allocate(detector, zoltan_global_ndims, local_coord_count(shape))
+             call allocate(detector, zoltan_global_ndims, local_coord_count(shape), attribute_dims)
                    
              ! unpack detector information 
-             call unpack_detector(detector, rbuf(rhead:rhead+zoltan_global_ndata_per_det-1), zoltan_global_ndims, &
+             call unpack_detector(detector, rbuf(rhead:rhead+zoltan_global_ndata_per_det-1), zoltan_global_ndims, attribute_dims, &
                     global_to_local=zoltan_global_uen_to_new_local_numbering, coordinates=zoltan_global_new_positions)
 
              ! Make sure the unpacked detector is in this element

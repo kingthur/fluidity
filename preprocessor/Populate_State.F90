@@ -2613,11 +2613,8 @@ contains
 
           if(trim(vfield%name)=="Velocity") then
 
-<<<<<<< HEAD
              if((iterations > 1) .or. (prescribed)) then
-=======
-             if( iterations>1 .or. prescribed) then
->>>>>>> ed2d9e4934c3c31505122af4e43472248643fadf
+
              
                 call allocate(aux_vfield, vfield%dim, vfield%mesh, "Nonlinear"//trim(vfield%name))
                 call zero(aux_vfield)
@@ -2631,16 +2628,9 @@ contains
                 aux_vfield%option_path=""
                 aux_vfield%aliased = .true.
                 call insert(states(p), aux_vfield, trim(aux_vfield%name))
-<<<<<<< HEAD
                 
              end if
 
-             
-=======
-             
-             end if
-
->>>>>>> ed2d9e4934c3c31505122af4e43472248643fadf
              if(prognostic) then
                 gravity = have_option("/physical_parameters/gravity")
                 if(gravity) then
@@ -2656,11 +2646,7 @@ contains
                    call deallocate(aux_sfield)
                 end if
              end if
-<<<<<<< HEAD
-             
-=======
-            
->>>>>>> ed2d9e4934c3c31505122af4e43472248643fadf
+
           end if
 
           if(trim(vfield%name)=="VelocityInnerElement") then
