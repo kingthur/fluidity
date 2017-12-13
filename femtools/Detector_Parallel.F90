@@ -138,16 +138,28 @@ contains
     integer, dimension(:), allocatable :: ndets_being_bcast
     integer :: attribute_dims !!chris hack
     real, allocatable :: send_buff(:), recv_buff(:)
-    type(element_type), pointer :: shape  
+    type(element_type), pointer :: shape
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
 
     ewrite(2,*) "In distribute_detectors"  
 
     xfield => extract_vector_field(state,"Coordinate")
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
 
     ! We allocate a point-to-point sendlist for every processor
     nprocs=getnprocs()
@@ -330,6 +342,9 @@ contains
     integer, dimension(:), allocatable :: sendRequest, status
     integer :: attribute_dims !chris hack
     logical :: have_update_vector
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
 
     ewrite(2,*) "In exchange_detectors"  
 
@@ -339,11 +354,21 @@ contains
 
     xfield => extract_vector_field(state,"Coordinate")
     dim=xfield%dim
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
     allocate( sendRequest(nprocs) )
     sendRequest = MPI_REQUEST_NULL
 

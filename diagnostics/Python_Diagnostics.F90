@@ -91,7 +91,7 @@ contains
     write(buffer,*) dt
     call python_run_string("dt="//trim(buffer))  
       
-    ! And finally run the user's codey
+    ! And finally run the user's code
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm",pycode)
     call python_run_string(trim(pycode))
     

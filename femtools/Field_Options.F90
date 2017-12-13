@@ -188,6 +188,10 @@ contains
 
        complete_field_path=trim(path) // "/aliased"
 
+    else if (have_option(trim(path) // "/particles")) then
+
+       complete_field_path=trim(path) // "/particles"
+       
     else
       
       if (present(stat)) then

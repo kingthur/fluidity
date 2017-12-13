@@ -284,11 +284,10 @@ contains
     ! Calculate the number of scalar fields to solve for and their correct
     ! solve order taking into account dependencies.
     call get_ntsol(ntsol)
-
+ 
     call initialise_field_lists_from_options(state, ntsol)
 
     call check_old_code_path()
-
     !        Initialisation of distance to top and bottom field
     !        Currently only needed for free surface
     if (has_scalar_field(state(1), "DistanceToTop")) then
@@ -544,7 +543,7 @@ contains
              end if
           end do
 
-          field_loop: do it = 1, ntsol
+          field_loop: do it = 1, ntsol !!!need to change this
              ewrite(2, "(a,i0,a,i0)") "Considering scalar field ", it, " of ", ntsol
              ewrite(1, *) "Considering scalar field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name)
 

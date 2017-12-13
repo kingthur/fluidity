@@ -64,7 +64,7 @@ contains
     logical, save:: initialised=.false.
     integer :: nsol, nphases,nfields,ncars,p,f,i, tmpint
     character(len=FIELD_NAME_LEN) :: tmpstring
-    logical :: aliased, pressure
+    logical :: aliased, pressure, particles
 
     integer, dimension(:), allocatable :: priority
     !! Field list for tracers (from 1 to NTSOL)
@@ -98,6 +98,8 @@ contains
           do f = 0,nfields-1
              aliased = have_option('/material_phase['// &
                   int2str(p)//']/scalar_field['//int2str(f)//']/aliased')
+             particles = have_option('/material_phase['// &
+                  int2str(p)//']/scalar_field['//int2str(f)//']/particles')
              call get_option('/material_phase['// &
                   int2str(p)// &
                   ']/scalar_field['//int2str(f)//']/name', &
@@ -109,7 +111,7 @@ contains
                   tmpint, default=0)
              pressure = (trim(tmpstring)=='Pressure')
 
-             if (.not. aliased .and. .not. pressure) then
+             if (.not. aliased .and. .not. pressure .and. .not. particles) then
                 nsol = nsol + 1
                 temp_field_name_list(nsol) = tmpstring
                 temp_field_optionpath_list(nsol) = '/material_phase['// &
@@ -330,7 +332,7 @@ contains
     integer, intent(out) :: ntsol
     integer :: nphases,nfields,ncars,p,f
     character(len=FIELD_NAME_LEN) :: tmpstring
-    logical :: aliased, pressure
+    logical :: aliased, pressure, particles
 
     ntsol = 0
 
@@ -344,8 +346,10 @@ contains
           call get_option('/material_phase['// &
                int2str(p)//']/scalar_field['//int2str(f)//']/name', tmpstring)
           pressure = (trim(tmpstring)=='Pressure')
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
 
-          if (.not. aliased .and. .not. pressure) then
+          if (.not. aliased .and. .not. pressure .and. .not. particles) then
              ntsol = ntsol + 1
           end if
        end do

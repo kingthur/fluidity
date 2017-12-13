@@ -1794,7 +1794,7 @@ contains
     character(len=*), optional, intent(in):: field_name
     logical, optional, intent(in):: dont_allocate_prognostic_value_spaces
 
-    logical :: is_prognostic, is_prescribed, is_diagnostic, is_aliased
+    logical :: is_prognostic, is_prescribed, is_diagnostic, is_aliased, is_particle
     ! paths for options and child fields
     character(len=OPTION_PATH_LEN) :: path, adapt_path
     ! Strings for names
@@ -1802,9 +1802,12 @@ contains
     type(scalar_field) :: field
     type(mesh_type), pointer :: mesh
     logical :: backward_compatibility, is_constant
-
+    
     is_aliased=have_option(trim(option_path)//"/aliased")
     if(is_aliased) return
+
+    is_particle=have_option(trim(option_path)//"/particles")
+    if(is_particle) return
 
     ! Save option_path
     path=trim(option_path)
@@ -1856,7 +1859,6 @@ contains
        path=trim(path)//"/diagnostic"
 
     end if
-
     ! Get mesh
     if(present(parent_mesh).and.&
          .not.have_option(trim(path)//"/mesh[0]/name")) then
@@ -1866,13 +1868,11 @@ contains
        call get_option(trim(path)//"/mesh[0]/name", mesh_name)
        mesh => extract_mesh(state, trim(mesh_name))
     end if
-
     if (defer_allocation(option_path, mesh, dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)) then
        ! If we want to defer allocation (for sam), don't allocate the value space yet
        call allocate(field, mesh, name=trim(lfield_name), &
           field_type=FIELD_TYPE_DEFERRED)
-    else if(is_constant .and. .not. backward_compatibility) then
-         
+    else if(is_constant .and. .not. backward_compatibility) then  
        ! Allocate as constant field if possible (and we don't need backward compatibility)
        call allocate(field, mesh, name=trim(lfield_name), &
           field_type=FIELD_TYPE_CONSTANT)
@@ -1882,12 +1882,10 @@ contains
        ! If we have to keep backward compatibility, then
        ! just allocate the value space as normal,
        ! and don't try any funny tricks to save memory.
-
        ! Allocate field
        call allocate(field, mesh, name=trim(lfield_name))
        call zero(field)
     end if
-
 
     ewrite(2,*) trim(lfield_name), " is on mesh ", trim(mesh%name)
 
@@ -1897,14 +1895,12 @@ contains
     ! Finally! Insert field into state!
     call insert(state, field, field%name)
     call deallocate(field)
-
     ! Check for fields that are children of this field:
     call allocate_and_insert_children(path, state, mesh_name, lfield_name, &
         dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     call allocate_and_insert_grandchildren(path, state, mesh_name,&
          & lfield_name, &
          & dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
-
     ! Check for adaptivity weights associated with this field:
     adapt_path=trim(path)//"/adaptivity_options"
     if(have_option(trim(adapt_path)//"/absolute_measure")) then
@@ -1918,7 +1914,6 @@ contains
           parent_name=lfield_name, &
           dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     end if
-
   end subroutine allocate_and_insert_scalar_field
 
   recursive subroutine allocate_and_insert_vector_field(option_path, state, parent_mesh, parent_name, &
@@ -3178,6 +3173,7 @@ contains
     integer :: periodic_mesh_count ! number of meshes with periodic_boundary_conition options
     ! logicals to find out if we have certain options
     logical :: is_aliased
+    logical :: is_particle
 
     ! Get number of meshes
     nmeshes=option_count("/geometry/mesh")
@@ -3210,7 +3206,6 @@ contains
        end if
 
     end do mesh_loop1
-
     ! Check that at least one mesh is read in from a file.
     if(n_external_meshes==0) then
        FLExit("At least one mesh must come from a file.")
@@ -3222,7 +3217,6 @@ contains
       ewrite(-1,*) "With multiple external (from_file) meshes"
       FLExit("Only one external mesh may leave out the exclude_from_mesh_adaptivity option.")
     end if
-
     ! Check that dimension of mesh is the same as the dimension defined in the options file
     ! ...that's not so easy: let's just do this in insert_external_mesh() with a nice FLEXit
 
@@ -3333,21 +3327,17 @@ contains
        end if
 
     end do mesh_loop2
-
     ! Check that mesh associated with each field exists
 
     nstates=option_count("/material_phase")
 
     state_loop: do i=0, nstates-1
-
        call get_option("/material_phase["//int2str(i)//"]/name", phase_name)
-
        ! Get number of scalar fields that are children of this state
        nfields=option_count("/material_phase["//int2str(i)//"]/scalar_field")
 
        ! Loop over scalar fields
        scalar_field_loop: do j=0, nfields-1
-
           ! Save path to field
           path="/material_phase["//int2str(i)//"]/scalar_field["&
                &//int2str(j)//"]"
@@ -3358,22 +3348,17 @@ contains
 
           ! If field is not aliased check mesh name
           is_aliased=have_option(trim(path)//"/aliased")
-          if(.not.is_aliased) then
+          is_particle=have_option(trim(path)//"/particles")
+          if((.not.is_aliased).and.(.not.is_particle)) then
              call get_option(trim(complete_field_path(path))//"/mesh[0]/name", mesh_name)
-
              if (.not. have_option("/geometry/mesh::"//trim(mesh_name))) then
-
                 ewrite(-1,*) "Unknown mesh: ", trim(mesh_name)
                 ewrite(-1,*) "Specified as mesh for scalar_field ", trim(field_name)
                 ewrite(-1,*) "In material_phase ", trim(phase_name)
                 FLExit("Error: unknown mesh.")
-
              end if
-
           end if
-
        end do scalar_field_loop
-
        ! Get number of vector fields that are children of this state
        nfields=option_count("/material_phase["//int2str(i)//"]/vecto&
             &r_field")
@@ -3406,7 +3391,6 @@ contains
           end if
 
        end do vector_field_loop
-
        ! Get number of tensor fields that are children of this state
        nfields=option_count("/material_phase["//int2str(i)//"]/tensor_field")
 
@@ -3437,9 +3421,7 @@ contains
           end if
 
        end do tensor_field_loop
-
     end do state_loop
-
   end subroutine check_mesh_options
   
   subroutine check_ocean_options

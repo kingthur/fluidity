@@ -304,14 +304,7 @@ start =
                element move_with_mesh {
                   empty
                }?,
-               lagrangian_timestepping?,
-	       ##Interface for interacting with detector attributes
-	       element detector_attributes {
-	          ## Number of attributes to be tracked
-		  element attribute_dimensions {
-		     integer
-		  }
-	       }?
+               lagrangian_timestepping?
 	       
             }?, 
             ## Options to create even more output in the logs:
@@ -333,6 +326,100 @@ start =
                }?
             }?
          },
+	 ## Particle options
+	 element particles {
+	    (
+		  ## A single lagrangian particle
+                  element single_particle {
+                     attribute name { xsd:string },
+                     (
+                     ## This is the initial location of a particle that moves with the fluid velocity.
+                        element location {
+                           real_dim_vector
+                     }|
+                        ## File containing the particle positions in binary form
+                        element from_checkpoint_file {
+                           attribute file_name { xsd:string },
+                           ## The format of the input file containing field data.
+                           element format {
+                             element string_value {
+                                 "binary"
+                             }
+                           }
+                        }
+                     )
+                  }|
+		  ## Particles with their locations specified via a python function or from a file. Allows particle arrays to be added.
+                  element particle_array {
+                     attribute name { xsd:string },
+                     ## The number of particles prescribed by the python function.
+                     element number_of_particles {
+                        integer
+                     },
+                     (
+                        ## Create particles which move with the fluid velocity.
+                        element lagrangian {
+                           empty
+                        }
+                     ),
+                     (
+                        ## Python function prescribing dimensional vector input. Functions should be of the form:
+                        ##
+                        ##  def val(t):
+                        ##     # Function code
+                        ##     return # Return value
+                        ##
+                        ## The return value must have length number_of_particles.
+                        ##
+                        ## *** IMPORTANT NOTE ***
+                        ##
+                        ## The t argument is for future use only - currently particle locations are only set at simulation start.
+                        element python {
+                          python_code
+                        }|
+                        ## File containing the particle positions in binary form
+                        element from_file {
+                           attribute file_name { xsd:string },
+                           ## The format of the input file containing field data.
+                           element format {
+                             element string_value {
+                                 "binary"
+                             }
+                           }
+                        }|
+                        ## File containing the particle positions in binary form
+                        element from_checkpoint_file {
+                           attribute file_name { xsd:string },
+                           ## The format of the input file containing field data.
+                           element format {
+                              element string_value {
+                                 "binary"
+                              }
+                           }
+                        }
+                     )
+                  }
+	    )*,
+	    (
+               ## By default Fluidity will fail if a particle has left the domain.
+               element fail_outside_domain {
+                  empty
+               }|
+               ## Enable to write NaN values to particle output if a particle has left the domain.
+               element write_nan_outside_domain {
+                  empty
+               }
+            ),
+	    ## Enable to write particle output in ascii format
+            element ascii_output {
+               comment
+            }?,
+            ## Enable to let particles move with the domain if mesh_movement is enabled.
+            element move_with_mesh {
+               empty
+            }?,
+            lagrangian_timestepping?
+         }?,
          ## Options dealing with time discretisation
          element timestepping {
             ## Current simulation time. At the start of the simulation this
@@ -2416,6 +2503,7 @@ prognostic_density_field =
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar,
@@ -2645,6 +2733,7 @@ diagnostic_scalar_field =
       diagnostic_scalar_stat_options,
       scalar_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_scalar_field,
       recalculation_options?,
@@ -2656,7 +2745,8 @@ diagnostic_scalar_field_no_adapt =
    (
       diagnostic_output_options,
       diagnostic_scalar_stat_options,
-      diagnostic_detector_options
+      diagnostic_detector_options,
+      diagnostic_particle_options
    )
 
 # Default child of diagnostic scalar field
@@ -2665,6 +2755,7 @@ diagnostic_scalar_field_tidal_range =
       diagnostic_output_options,
       diagnostic_scalar_stat_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       adaptivity_options_scalar_field,
       (
           element spin_up_time {
@@ -2682,6 +2773,7 @@ diagnostic_vector_field =
       diagnostic_vector_stat_options,
       vector_convergence_options,      
       diagnostic_detector_options,
+      diagnostic_particle_options,
       vector_steady_state_options,      
       adaptivity_options_vector_field,
       recalculation_options?,
@@ -2712,6 +2804,7 @@ diagnostic_vector_field_bed_shear_stress =
       diagnostic_output_options,
       diagnostic_vector_stat_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       adaptivity_options_vector_field
    )
 
@@ -2798,6 +2891,7 @@ diagnostic_cv_gradient_vector_field =
       diagnostic_vector_stat_options,
       vector_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       vector_steady_state_options,
       adaptivity_options_vector_field,
       recalculation_options?
@@ -2813,6 +2907,7 @@ diagnostic_gradient_vector_field =
       diagnostic_vector_stat_options,
       vector_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       vector_steady_state_options,
       adaptivity_options_vector_field,
       recalculation_options?
@@ -2825,6 +2920,7 @@ diagnostic_cv_divergence_scalar_field =
       diagnostic_scalar_stat_options,
       scalar_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_scalar_field,
       recalculation_options?
@@ -2840,6 +2936,7 @@ diagnostic_fe_divergence_scalar_field =
       diagnostic_scalar_stat_options,
       scalar_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_scalar_field,
       recalculation_options?
@@ -3578,10 +3675,89 @@ prognostic_detector_options = detector_options_enabled_default
 diagnostic_detector_options = detector_options_enabled_default
 prescribed_detector_options = detector_options_disabled_default
 
+# Options for whether a field is to be included in particles.
+particle_options_enabled_default = 
+   (
+      ## Specify what is added to particles
+      element particles {
+         (
+            ## This field is included at each particle location.
+            element include_in_particles {
+               comment
+            }|
+            ## This field is not included at each particle location.
+            element exclude_from_particles {
+               comment
+            }
+         )
+      }
+   )
+
+# Options for whether a field is to be included in particles.
+particle_options_disabled_default = 
+   (
+      ## Specify what is added to particles
+      element particles {
+         (
+            ## This field is not included at each particle location.
+            element exclude_from_particles {
+               comment
+            }|
+            ## This field is included at each particle location.
+            element include_in_particles {
+               comment
+            }
+         )
+      }
+   )
+
+# Particle defaults off for prognostic, diagnostic and prescribed fields
+prognostic_particle_options = particle_options_disabled_default
+diagnostic_particle_options = particle_options_disabled_default
+prescribed_particle_options = particle_options_disabled_default
+
 generic_aliased_field =
    (
       attribute material_phase_name { xsd:string },
       attribute field_name { xsd:string }
+   )
+
+generic_particle_field =
+   (
+   ## Constant value
+   element constant {
+      real
+   }|
+   ## Python function prescribing real input. Functions should be of the form:
+   ##
+   ##  def val(X, t):
+   ##     # Function code
+   ##     return # Return value
+   ##
+   ## where X is a tuple of length geometry dimension.
+   element python {
+      python_code
+   }|
+   ## Python function prescribing real input. Functions should be of the form:
+   ##
+   ##  def val (X, t, fields):
+   ##     # Function code
+   ##     return # Return value
+   ##
+   ## where X is a tuple of length geometry dimension.
+   element python_fields {
+      python_code
+   }|
+   ## File containing the particle positions in binary form
+   element from_checkpoint_file {
+      attribute file_name { xsd:string },
+       ## The format of the input file containing field data.
+       element format {
+          element string_value {
+              "binary"
+          }
+       }
+   }
    )
 
 # This is the choice of additional scalar field to be solved for
@@ -3610,7 +3786,10 @@ scalar_field_choice =
                }|
                element aliased {
                   generic_aliased_field
-               }
+               }|
+	       element particles {
+	       	  generic_particle_field
+	       }
             )
          }|
          ## Prognostic scalar fields below this
@@ -3751,6 +3930,7 @@ scalar_field_choice =
                   prognostic_scalar_stat_options,
                   scalar_convergence_options,
                   prognostic_detector_options,
+		  prognostic_particle_options,
                   scalar_steady_state_options,
                   adaptivity_options_prognostic_scalar_field,
                   interpolation_algorithm_scalar
@@ -4199,7 +4379,9 @@ scalar_field_choice =
          #               }|
          #               element aliased {
          #                  generic_aliased_field
-         #               }
+         #               }|
+	 #		 element particles {
+	 #		 }
          #            )
          #        }
          
@@ -6872,6 +7054,7 @@ prognostic_photosynthetic_radiation =
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_scalar_field,
       ## Set the priority of this field

@@ -140,7 +140,7 @@ module diagnostic_variables
     !! Output unit for diagnostics file.
     !! (assumed non-opened as long these are 0)
     integer :: diag_unit=0, conv_unit=0, &
-      & detector_checkpoint_unit=0, detector_file_unit=0 
+         & detector_checkpoint_unit=0, detector_file_unit=0
 
     !! Are we writing to a convergence file?
     logical :: write_convergence_file=.false.
@@ -1360,28 +1360,40 @@ contains
 
   end subroutine initialise_steady_state
 
-  subroutine create_single_detector(detector_list,xfield,position,attribute_dims,id,type,name)! chris hack, add attribute dims parameter
+  subroutine create_single_detector(detector_list,xfield,position,attribute_dims,id,type,name,time,state,attribute_vals)
     ! Allocate a single detector, populate and insert it into the given list
     ! In parallel, first check if the detector would be local and only allocate if it is
     type(detector_linked_list), intent(inout) :: detector_list
     type(vector_field), pointer :: xfield
     real, dimension(xfield%dim), intent(in) :: position
-    integer, intent(in) :: id, type, attribute_dims !chris hack
+    integer, intent(in) :: id, type, attribute_dims
     character(len=*), intent(in) :: name
 
     type(detector_type), pointer :: detector
     type(element_type), pointer :: shape
+    type(state_type), dimension(:), intent(in) :: state
     real, dimension(xfield%dim+1) :: lcoords
-    integer :: element, i !chris hack
-    real, dimension(attribute_dims) :: attributes !!!chris hack, need to read in dimensions/have dims set from python
+    integer :: element
+    real, dimension(attribute_dims) :: attributes
+    real, dimension(attribute_dims), intent(in), optional :: attribute_vals
+
+    !chris hacks
+    integer :: nphases, p, nfields, f, i
+    logical :: particles_c, particles_p, particles_f
+    real :: const, attribute, time, dt
+    character(len=PYTHON_FUNC_LEN) :: func
+    character(len=OPTION_PATH_LEN) :: format, filename
+    character(len=OPTION_PATH_LEN) :: option_buffer
+!    type(state_type), dimension(:) :: states  !!dimension?
+    
     shape=>ele_shape(xfield,1)
     assert(xfield%dim+1==local_coord_count(shape))
-
     ! Determine element and local_coords from position
     ! In parallel, global=.false. can often work because there will be
     ! a halo of non-owned elements in your process and so you can work out
     ! ownership without communication.  But in general it won't work.
     call picker_inquire(xfield,position,element,local_coord=lcoords,global=.true.)
+    call get_option("/timestepping/timestep", dt)
     ! If we're in parallel and don't own the element, skip this detector
     if (isparallel()) then
        if (element<0) return
@@ -1406,12 +1418,45 @@ contains
     detector%local_coords=lcoords
     detector%type=type
     detector%id_number=id
-!!!chris hack (real thing will have to be allocated/allocatable)
-    if (have_option("/io/detectors/detector_attributes")) then
+!!!chris hack 
+    if (attribute_dims.ne.0) then
        allocate(detector%attributes(attribute_dims))
-       do i=1,attribute_dims
-          detector%attributes(i)=position(i)
-       end do
+       if (present(attribute_vals)) then
+          detector%attributes=attribute_vals
+       else !loop phases and get ones with path, trim path and get values (check if python or constant)
+          i=1
+          nphases = option_count('/material_phase')
+          do p = 0, nphases-1
+             nfields = option_count('/material_phase[' &
+                  //int2str(p)//']/scalar_field')
+             do f = 0,nfields-1
+                particles_c = have_option('/material_phase['// &
+                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/constant')
+                particles_p = have_option('/material_phase['// &
+                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/python')
+                particles_f = have_option('/material_phase['// &
+                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields')
+                if (particles_c) then
+                   call get_option('/material_phase['// &
+                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/constant', const)
+                   detector%attributes(i)=const
+                   i=i+1
+                else if (particles_p) then
+                   call get_option('/material_phase['// &
+                        int2str(p)//']/scalar_field['//int2str(f)//']/particles/python', func)
+                   call set_particle_attribute_from_python(attribute, position, func, time)
+                   detector%attributes(i)=attribute
+                   i=i+1
+                else if (particles_f) then     !!!Maybe set this outside instead and pass in attribute vals?? would have state then
+                   call get_option('/material_phase['// &
+                        int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields', func)
+                   call set_particle_fields_from_python(state, detector, attribute, func, time)
+                   detector%attributes(i)=attribute
+                   i=i+1
+                end if
+             end do
+          end do
+       end if
     end if
   end subroutine create_single_detector
   
@@ -1433,12 +1478,23 @@ contains
     type(vector_field), pointer :: vfield, xfield
     real, allocatable, dimension(:,:) :: coords
     real, allocatable, dimension(:) :: detector_location
+    real, allocatable, dimension(:) :: attribute_vals !chris hack
+    real, allocatable, dimension(:) :: packed_buff !chris hack
     real:: current_time
     character(len = OPTION_PATH_LEN) :: detectors_cp_filename, detector_file_filename
     integer :: attribute_dims !!chris hack
+    integer :: attribute_dims2
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
+    character(len=OPTION_PATH_LEN) :: name
 
     type(detector_type), pointer :: detector
     type(element_type), pointer :: shape
+
+    !particle options
+    integer :: lagrangian_particle, python_particles_func, python_particle
+    integer :: total_particles, total_particle_groups
 
     ! Idempotency check
     if (default_stat%detectors_initialised) return
@@ -1452,29 +1508,62 @@ contains
     python_functions_or_files = option_count("/io/detectors/detector_array")
     python_dete = 0
 
-    !Chris hack - get attribute dims
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
- 
+    ! Loop over all fields in state and record the ones we want to output
+    do phase=1,size(state) !loop phases
+       material_phase_name=trim(state(phase)%name)
+       ! Count the scalar fields to include in particles
+       do i = 1, size(state(phase)%scalar_names) !loop sfields
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(i))
+          if (sfield%option_path=="".or.aliased(sfield)) then
+             cycle
+          end if
+       end do
+    end do
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
+    
     do i=1,python_functions_or_files
        write(buffer, "(a,i0,a)") "/io/detectors/detector_array[",i-1,"]"
        call get_option(trim(buffer)//"/number_of_detectors", j)
        python_dete=python_dete+j
     end do
-   
-    total_dete=static_dete+lagrangian_dete+python_dete
-    default_stat%detector_list%total_num_det=total_dete
 
+    total_dete=static_dete+lagrangian_dete+python_dete
     total_dete_groups=static_dete+lagrangian_dete+python_functions_or_files
 
-    allocate(default_stat%detector_group_names(total_dete_groups))
-    allocate(default_stat%number_det_in_each_group(total_dete_groups))
-    allocate(default_stat%detector_list%detector_names(total_dete))
+    !!!Particle options
+    lagrangian_particle = option_count("/particles/single_particle")
+    python_particles_func = option_count("/particles/particle_array")
+    python_particle = 0
     
-    if (total_dete==0) return
+    do i=1,python_particles_func
+       write(buffer, "(a,i0,a)") "/particles/particle_array[",i-1,"]"
+       call get_option(trim(buffer)//"/number_of_particles", j)
+       python_particle=python_particle+j
+    end do
+
+    total_particles = lagrangian_particle+python_particle
+    total_particle_groups=lagrangian_particle+python_particles_func
+
+    !combine both
+    default_stat%detector_list%total_num_det=total_dete+total_particles
+    allocate(default_stat%detector_group_names(total_dete_groups+total_particle_groups))
+    allocate(default_stat%number_det_in_each_group(total_dete_groups+total_particle_groups))
+    allocate(default_stat%detector_list%detector_names(total_dete+total_particles))
+    
+    if (total_dete+total_particles==0) return
 
     ! Register this I/O detector list with a global list of detector lists
     call register_detector_list(default_stat%detector_list)
@@ -1484,14 +1573,16 @@ contains
     call get_option("/geometry/dimension",dim)
     call get_option("/timestepping/current_time", current_time)
     allocate(detector_location(dim))
+    allocate(packed_buff(dim+attribute_dims))
+    allocate(attribute_vals(attribute_dims))
 
     ! Enable detectors to drift with the mesh
-    if (have_option("/io/detectors/move_with_mesh")) then
+    if (have_option("/io/detectors/move_with_mesh").or.have_option("/particles/move_with_mesh")) then
        default_stat%detector_list%move_with_mesh=.true.
     end if
 
     ! Set flag for NaN detector output
-    if (have_option("/io/detectors/write_nan_outside_domain")) then
+    if (have_option("/io/detectors/write_nan_outside_domain").or.have_option("/particles/write_nan_outside_domain")) then
        default_stat%detector_list%write_nan_outside=.true.
     end if
     
@@ -1501,7 +1592,9 @@ contains
     ! done from a file
     if (have_option("/io/detectors/static_detector/from_checkpoint_file").or. & 
          & have_option("/io/detectors/lagrangian_detector/from_checkpoint_file").or. &
-         & have_option("/io/detectors/detector_array/from_checkpoint_file")) then
+         & have_option("/io/detectors/detector_array/from_checkpoint_file").or. &
+         & have_option("/particles/single_particle/from_checkpoint_file").or. &
+         & have_option("/particles/particle_array/from_checkpoint_file")) then
        default_stat%from_checkpoint=.true.
     else
        default_stat%from_checkpoint=.false.
@@ -1533,9 +1626,10 @@ contains
           default_stat%detector_list%detector_names(i)=detector_name
 
           call create_single_detector(default_stat%detector_list, xfield, &
-                detector_location, attribute_dims, i, STATIC_DETECTOR, trim(detector_name))
+               detector_location, attribute_dims, i, STATIC_DETECTOR, &
+               trim(detector_name), current_time, state)
        end do
-
+       
        ! Read all single lagrangian detector from options
        do i=1,lagrangian_dete
           write(buffer, "(a,i0,a)") "/io/detectors/lagrangian_detector[",i-1,"]"
@@ -1550,9 +1644,10 @@ contains
           default_stat%detector_list%detector_names(static_dete+i)=detector_name
 
           call create_single_detector(default_stat%detector_list, xfield, &
-                detector_location, attribute_dims, static_dete+i, LAGRANGIAN_DETECTOR, trim(detector_name))
+               detector_location, attribute_dims, static_dete+i, LAGRANGIAN_DETECTOR, &
+               trim(detector_name), current_time, state)
        end do
-
+       ! Read detectors from options
        k=static_dete+lagrangian_dete+1
 
        do i=1,python_functions_or_files
@@ -1582,9 +1677,10 @@ contains
              do j=1,ndete
                 write(detector_name, fmt) trim(funcnam)//"_", j
                 default_stat%detector_list%detector_names(k)=trim(detector_name)
-
+                
                 call create_single_detector(default_stat%detector_list, xfield, &
-                       coords(:,j), attribute_dims, k, type_det, trim(detector_name))
+                     coords(:,j), attribute_dims, k, type_det, &
+                     trim(detector_name), current_time, state)
                 k=k+1           
              end do
              deallocate(coords)
@@ -1607,54 +1703,149 @@ contains
                 default_stat%detector_list%detector_names(k)=trim(detector_name)
                 read(default_stat%detector_file_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, attribute_dims, k, type_det, trim(detector_name))
+                     detector_location, attribute_dims, k, type_det, &
+                     trim(detector_name), current_time, state)
                 k=k+1          
              end do
           end if
-       end do      
+       end do
+
+       ! Read detectors from options
+       ewrite(2,*) "Reading particles from options"
+
+       ! Read all single particles from options
+       do i=1,lagrangian_particle
+          ! Read detectors from options
+          write(buffer, "(a,i0,a)") "/particles/single_particle[",i-1,"]"
+          ! Read detectors from options
+
+          shape_option=option_shape(trim(buffer)//"/location")
+          assert(xfield%dim==shape_option(1))
+          ! Read detectors from options
+          call get_option(trim(buffer)//"/location", detector_location)
+          
+          call get_option(trim(buffer)//"/name", detector_name)
+          default_stat%detector_group_names(i+static_dete+lagrangian_dete+python_functions_or_files)=detector_name
+          default_stat%number_det_in_each_group(i+static_dete+lagrangian_dete+python_functions_or_files)=1.0
+          default_stat%detector_list%detector_names(k-1+i)=detector_name
+
+          call create_single_detector(default_stat%detector_list, xfield, &
+               detector_location, attribute_dims, k-1+i, LAGRANGIAN_DETECTOR, &
+               trim(detector_name), current_time, state)
+       end do
+
+       k=k+lagrangian_particle
+
+       do i=1,python_particles_func
+          write(buffer, "(a,i0,a)") "/particles/particle_array[",i-1,"]"
+
+          call get_option(trim(buffer)//"/name", funcnam)
+          call get_option(trim(buffer)//"/number_of_particles", ndete)
+          str_size=len_trim(int2str(ndete))
+          fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
+
+          if (have_option(trim(buffer)//"/lagrangian")) then
+             type_det=LAGRANGIAN_DETECTOR
+          else
+             type_det=STATIC_DETECTOR
+          end if
+
+          default_stat%detector_group_names(i+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)=trim(funcnam)
+          default_stat%number_det_in_each_group(i+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)=ndete
+
+          if (.not.have_option(trim(buffer)//"/from_file")) then
+
+             ! Reading particles from a python function
+             call get_option(trim(buffer)//"/python", func)
+             allocate(coords(dim,ndete))
+             call set_detector_coords_from_python(coords, ndete, func, current_time)
+          
+             do j=1,ndete
+                write(detector_name, fmt) trim(funcnam)//"_", j
+                default_stat%detector_list%detector_names(k)=trim(detector_name)
+                
+                call create_single_detector(default_stat%detector_list, xfield, &
+                     coords(:,j), attribute_dims, k, type_det, &
+                     trim(detector_name), current_time, state)
+                k=k+1           
+             end do
+             deallocate(coords)
+
+          else
+
+             ! Reading from a binary file where the user has placed the particle positions
+             default_stat%detector_file_unit=free_unit()
+             call get_option("/particles/particle_array/from_file/file_name",detector_file_filename)
+
+#ifdef STREAM_IO
+             open(unit = default_stat%detector_file_unit, file = trim(detector_file_filename), &
+                  & action = "read", access = "stream", form = "unformatted")
+#else
+             FLAbort("No stream I/O support")
+#endif
+   
+             do j=1,ndete
+                write(detector_name, fmt) trim(funcnam)//"_", j
+                default_stat%detector_list%detector_names(k)=trim(detector_name)
+                read(default_stat%detector_file_unit) detector_location
+                call create_single_detector(default_stat%detector_list, xfield, &
+                     detector_location, attribute_dims, k, type_det, &
+                     trim(detector_name), current_time, state)
+                k=k+1          
+             end do
+          end if
+       end do
+       
     else 
        ewrite(2,*) "Reading detectors from checkpoint"
-
        ! If reading from checkpoint file:
        ! Detector checkpoint file names end in _det, with.groups appended for the header file
-       ! and .positions.dat appended for the binary data file that holds the positions
+       ! and .attributes.dat appended for the binary data file that holds the positions and attributes
 
        default_stat%detector_checkpoint_unit=free_unit()
        if (have_option("/io/detectors/static_detector")) then
           call get_option("/io/detectors/static_detector/from_checkpoint_file/file_name",detectors_cp_filename)  
        elseif (have_option("/io/detectors/lagrangian_detector")) then 
           call get_option("/io/detectors/lagrangian_detector/from_checkpoint_file/file_name",detectors_cp_filename)  
-       else 
-          call get_option("/io/detectors/detector_array/from_checkpoint_file/file_name",detectors_cp_filename)  
+       elseif (have_option("/io/detectors/detector_array/")) then
+          call get_option("/io/detectors/detector_array/from_checkpoint_file/file_name",detectors_cp_filename)
+       elseif (have_option("/particles/single_particle")) then
+          call get_option("/particles/single_particle/from_checkpoint_file/file_name",detectors_cp_filename)
+       else
+          call get_option("/particles/particle_array/from_checkpoint_file/file_name",detectors_cp_filename)
        end if 
 
        open(unit=default_stat%detector_checkpoint_unit, file=trim(detectors_cp_filename) // '.groups', action="read") 
 
        ! First we read the header of checkpoint_file to get the order in which the detectors were read initialliy
-       do i=1, total_dete_groups 
+       do i=1, total_dete_groups+total_particle_groups
           read(default_stat%detector_checkpoint_unit,'(a,i10)') default_stat%detector_group_names(i), default_stat%number_det_in_each_group(i)
        end do
 
        close(default_stat%detector_checkpoint_unit)
-
 #ifdef STREAM_IO
-       open(unit = default_stat%detector_checkpoint_unit, file = trim(detectors_cp_filename) // '.positions.dat', &
-             & action = "read", access = "stream", form = "unformatted")
+       open(unit = default_stat%detector_checkpoint_unit, file = trim(detectors_cp_filename) // '.attributes.dat', &
+            & action = "read", access = "stream", form = "unformatted") !was .position.dat
 #else
        FLAbort("No stream I/O support")
 #endif
  
        ! Read in order the last positions of the detectors from the binary file.
-
        do j=1,size(default_stat%detector_group_names)
           do i=1,static_dete
              write(buffer, "(a,i0,a)") "/io/detectors/static_detector[",i-1,"]"
              call get_option(trim(buffer)//"/name", temp_name)
        
              if (default_stat%detector_group_names(j)==temp_name) then
-                read(default_stat%detector_checkpoint_unit) detector_location
+                read(default_stat%detector_checkpoint_unit) packed_buff
+                detector_location=packed_buff(1:dim) !chris hack, reshape?
+                if (attribute_dims.NE.0) then
+                   attribute_vals=packed_buff(dim+1:dim+attribute_dims)
+                end if
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, attribute_dims, i, STATIC_DETECTOR, trim(temp_name))                  
+                     detector_location, attribute_dims, i, STATIC_DETECTOR, &
+                     trim(temp_name), current_time, state,  attribute_vals)
+                default_stat%detector_list%detector_names(i)=trim(temp_name)
              else
                 cycle
              end if
@@ -1667,9 +1858,15 @@ contains
              call get_option(trim(buffer)//"/name", temp_name)
 
              if (default_stat%detector_group_names(j)==temp_name) then
-                read(default_stat%detector_checkpoint_unit) detector_location
+                read(default_stat%detector_checkpoint_unit) packed_buff
+                detector_location=packed_buff(1:dim) !chris hack, reshape?
+                if (attribute_dims.NE.0) then
+                   attribute_vals=packed_buff(dim+1:dim+attribute_dims)
+                end if
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, attribute_dims, i+static_dete, LAGRANGIAN_DETECTOR, trim(temp_name)) 
+                     detector_location, attribute_dims, i+static_dete, LAGRANGIAN_DETECTOR, &
+                     trim(temp_name), current_time, state, attribute_vals)
+                default_stat%detector_list%detector_names(i+static_dete)=trim(temp_name)
              else
                 cycle
              end if
@@ -1696,9 +1893,14 @@ contains
 
                 do m=1,default_stat%number_det_in_each_group(j)
                    write(detector_name, fmt) trim(temp_name)//"_", m
-                   read(default_stat%detector_checkpoint_unit) detector_location
+                   read(default_stat%detector_checkpoint_unit) packed_buff
+                   detector_location=packed_buff(1:dim) !chris hack, reshape?
+                   if (attribute_dims.NE.0) then
+                      attribute_vals=packed_buff(dim+1:dim+attribute_dims)
+                   end if
                    call create_single_detector(default_stat%detector_list, xfield, &
-                          detector_location, attribute_dims, k, type_det, trim(detector_name)) 
+                        detector_location, attribute_dims, k, type_det, &
+                        trim(detector_name), current_time, state, attribute_vals) 
                    default_stat%detector_list%detector_names(k)=trim(detector_name)
                    k=k+1           
                 end do
@@ -1708,10 +1910,70 @@ contains
           end do
        end do
 
+       !Read in particle locations from checkpoint file
+       do j=1,size(default_stat%detector_group_names)
+          do i=1,lagrangian_particle
+             write(buffer, "(a,i0,a)") "/particles/single_particle[",i-1,"]"
+             call get_option(trim(buffer)//"/name", temp_name)
+             if (default_stat%detector_group_names(j)==temp_name) then
+                read(default_stat%detector_checkpoint_unit) packed_buff
+                detector_location=packed_buff(1:dim) !chris hack, reshape?
+                if (attribute_dims.NE.0) then
+                   attribute_vals=packed_buff(dim+1:dim+attribute_dims)
+                end if
+                call create_single_detector(default_stat%detector_list, xfield, &
+                     detector_location, attribute_dims, k+i-1, LAGRANGIAN_DETECTOR, &
+                     trim(temp_name), current_time, state, attribute_vals)
+                default_stat%detector_list%detector_names(k+i-1)=trim(temp_name)
+             else
+                cycle
+             end if
+          end do
+       end do
+
+       k=k+lagrangian_particle
+
+       do j=1,size(default_stat%detector_group_names) 
+          do i=1,python_particles_func
+             write(buffer, "(a,i0,a)") "/particles/particle_array[",i-1,"]"      
+             call get_option(trim(buffer)//"/name", temp_name)
+
+             if (default_stat%detector_group_names(j)==temp_name) then
+                call get_option(trim(buffer)//"/number_of_particles", ndete)
+                str_size=len_trim(int2str(ndete))
+                fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
+
+                if (have_option(trim(buffer)//"/lagrangian")) then
+                   type_det=LAGRANGIAN_DETECTOR  !!!will always be lagrangian so remove?
+                else
+                   type_det=STATIC_DETECTOR
+                end if
+
+                do m=1,default_stat%number_det_in_each_group(j)
+                   write(detector_name, fmt) trim(temp_name)//"_", m
+                   read(default_stat%detector_checkpoint_unit) packed_buff
+                   detector_location=packed_buff(1:dim) !chris hack, reshape?
+                   if (attribute_dims.NE.0) then
+                      attribute_vals=packed_buff(dim+1:dim+attribute_dims)
+                   end if
+                   call create_single_detector(default_stat%detector_list, xfield, &
+                        detector_location, attribute_dims, k, type_det, &
+                        trim(detector_name), current_time, state, attribute_vals) 
+                   default_stat%detector_list%detector_names(k)=trim(detector_name)
+                   k=k+1           
+                end do
+             else                     
+                cycle                   
+             end if             
+          end do
+       end do
+
+       
+
     end if  ! from_checkpoint
 
     default_stat%detector_list%binary_output = .true.
-    if (have_option("/io/detectors/ascii_output")) then
+    if (have_option("/io/detectors/ascii_output").or.have_option("/particles/ascii_output")) then
        default_stat%detector_list%binary_output = .false.
        if(isparallel()) then
           FLAbort("No support for ascii detector output in parallel. Please use binary output.")
@@ -1737,18 +1999,27 @@ contains
        column=2
        positionloop: do i=1, default_stat%detector_list%total_num_det
           buffer=field_tag(name=default_stat%detector_list%detector_names(i), column=column+1,&
-              statistic="position", components=xfield%dim)
+               statistic="position", components=xfield%dim)
           write(default_stat%detector_list%output_unit, '(a)') trim(buffer)
           column=column+xfield%dim   ! xfield%dim == size(detector%position)
        end do positionloop
        
-       !chris hack output for chris
-       if (have_option("/io/detectors/detector_attributes")) then
-          chrisloop: do i=1,default_stat%detector_list%total_num_det
-             buffer=field_tag(name=default_stat%detector_list%detector_names(i), column=column+1,&
-                  statistic="attributes",components=attribute_dims)
-             write(default_stat%detector_list%output_unit, '(a)')trim(buffer)
-             column=column+attribute_dims
+       !chris hack output for chris !!!edit this part to get names of attributes, do all individually.
+       if (attribute_dims.ne.0) then
+          chrisloop: do i=1,default_stat%detector_list%total_num_det!!! do inside this loop so they are ordered correctly
+             do p = 0, nphases-1
+                do f = 0,nfields-1
+                   if (have_option('/material_phase['// &
+                        int2str(p)//']/scalar_field['//int2str(f)//']/particles')) then
+                      call get_option('/material_phase['// &
+                        int2str(p)//']/scalar_field['//int2str(f)//']/name', name)
+                      buffer=field_tag(name=default_stat%detector_list%detector_names(i), column=column+1,&
+                           statistic=name, components=1)
+                      write(default_stat%detector_list%output_unit, '(a)')trim(buffer)
+                      column=column+1
+                   end if
+                end do
+             end do
           end do chrisloop
        end if
 
@@ -1854,7 +2125,11 @@ contains
 
     !Get options for lagrangian detector movement
     if (check_any_lagrangian(default_stat%detector_list)) then
-       call read_detector_move_options(default_stat%detector_list, "/io/detectors")
+       if (have_option("/particles/lagrangian_timestepping")) then
+          call read_detector_move_options(default_stat%detector_list, "/particles") !!chris hack
+       else
+          call read_detector_move_options(default_stat%detector_list, "/io/detectors")
+       end if
     end if
 
     ! And finally some sanity checks
@@ -2605,13 +2880,27 @@ contains
     type(scalar_field), pointer :: sfield
     type(vector_field), pointer :: vfield
     type(detector_type), pointer :: detector
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
 
     ewrite(1,*) "In write_detectors"
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+    
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
+    
     !Computing the global number of detectors. This is to prevent hanging
     !when there are no detectors on any processor
     check_no_det=1
@@ -2653,7 +2942,7 @@ contains
        end do positionloop
 
        !!!chris hack
-       if (have_option("/io/detectors/detector_attributes")) then
+       if (attribute_dims.ne.0) then
           detector => detector_list%first
           chrisloop: do i=1,detector_list%length
              if(detector_list%binary_output) then
@@ -2783,7 +3072,10 @@ contains
     type(scalar_field), pointer :: sfield
     type(vector_field), pointer :: vfield
     type(detector_type), pointer :: node
-
+    
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
     ewrite(2, *) "In write_mpi_out"
 
     detector_list%mpi_write_count = detector_list%mpi_write_count + 1
@@ -2799,12 +3091,21 @@ contains
 
     vfield => extract_vector_field(state, "Coordinate")
     dim = vfield%dim
-
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+    
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
 
     
                            ! Time data
@@ -2850,7 +3151,7 @@ contains
 
 
     !!chris hack
-    if (have_option("/io/detectors/detector_attributes")) then
+    if (attribute_dims.ne.0) then
        node => detector_list%first
        chris_loop: do i = 1, detector_list%length
           assert(size(node%attributes) == attribute_dims)

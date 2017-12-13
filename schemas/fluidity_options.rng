@@ -375,15 +375,6 @@ The t argument is for future use only - currently detector locations are only se
             <optional>
               <ref name="lagrangian_timestepping"/>
             </optional>
-            <optional>
-              <element name="detector_attributes">
-                <a:documentation>Interface for interacting with detector attributes</a:documentation>
-                <element name="attribute_dimensions">
-                  <a:documentation>Number of attributes to be tracked</a:documentation>
-                  <ref name="integer"/>
-                </element>
-              </element>
-            </optional>
           </element>
         </optional>
         <optional>
@@ -409,6 +400,118 @@ NOTE: Requires -v2</a:documentation>
           </element>
         </optional>
       </element>
+      <optional>
+        <element name="particles">
+          <a:documentation>Particle options</a:documentation>
+          <zeroOrMore>
+            <choice>
+              <element name="single_particle">
+                <a:documentation>A single lagrangian particle</a:documentation>
+                <attribute name="name">
+                  <data type="string"/>
+                </attribute>
+                <choice>
+                  <element name="location">
+                    <a:documentation>This is the initial location of a particle that moves with the fluid velocity.</a:documentation>
+                    <ref name="real_dim_vector"/>
+                  </element>
+                  <element name="from_checkpoint_file">
+                    <a:documentation>File containing the particle positions in binary form</a:documentation>
+                    <attribute name="file_name">
+                      <data type="string"/>
+                    </attribute>
+                    <element name="format">
+                      <a:documentation>The format of the input file containing field data.</a:documentation>
+                      <element name="string_value">
+                        <value>binary</value>
+                      </element>
+                    </element>
+                  </element>
+                </choice>
+              </element>
+              <element name="particle_array">
+                <a:documentation>Particles with their locations specified via a python function or from a file. Allows particle arrays to be added.</a:documentation>
+                <attribute name="name">
+                  <data type="string"/>
+                </attribute>
+                <element name="number_of_particles">
+                  <a:documentation>The number of particles prescribed by the python function.</a:documentation>
+                  <ref name="integer"/>
+                </element>
+                <element name="lagrangian">
+                  <a:documentation>Create particles which move with the fluid velocity.</a:documentation>
+                  <empty/>
+                </element>
+                <choice>
+                  <element name="python">
+                    <a:documentation>Python function prescribing dimensional vector input. Functions should be of the form:
+
+ def val(t):
+    # Function code
+    return # Return value
+
+The return value must have length number_of_particles.
+
+*** IMPORTANT NOTE ***
+
+The t argument is for future use only - currently particle locations are only set at simulation start.</a:documentation>
+                    <ref name="python_code"/>
+                  </element>
+                  <element name="from_file">
+                    <a:documentation>File containing the particle positions in binary form</a:documentation>
+                    <attribute name="file_name">
+                      <data type="string"/>
+                    </attribute>
+                    <element name="format">
+                      <a:documentation>The format of the input file containing field data.</a:documentation>
+                      <element name="string_value">
+                        <value>binary</value>
+                      </element>
+                    </element>
+                  </element>
+                  <element name="from_checkpoint_file">
+                    <a:documentation>File containing the particle positions in binary form</a:documentation>
+                    <attribute name="file_name">
+                      <data type="string"/>
+                    </attribute>
+                    <element name="format">
+                      <a:documentation>The format of the input file containing field data.</a:documentation>
+                      <element name="string_value">
+                        <value>binary</value>
+                      </element>
+                    </element>
+                  </element>
+                </choice>
+              </element>
+            </choice>
+          </zeroOrMore>
+          <choice>
+            <element name="fail_outside_domain">
+              <a:documentation>By default Fluidity will fail if a particle has left the domain.</a:documentation>
+              <empty/>
+            </element>
+            <element name="write_nan_outside_domain">
+              <a:documentation>Enable to write NaN values to particle output if a particle has left the domain.</a:documentation>
+              <empty/>
+            </element>
+          </choice>
+          <optional>
+            <element name="ascii_output">
+              <a:documentation>Enable to write particle output in ascii format</a:documentation>
+              <ref name="comment"/>
+            </element>
+          </optional>
+          <optional>
+            <element name="move_with_mesh">
+              <a:documentation>Enable to let particles move with the domain if mesh_movement is enabled.</a:documentation>
+              <empty/>
+            </element>
+          </optional>
+          <optional>
+            <ref name="lagrangian_timestepping"/>
+          </optional>
+        </element>
+      </optional>
       <element name="timestepping">
         <a:documentation>Options dealing with time discretisation</a:documentation>
         <element name="current_time">
@@ -3265,6 +3368,7 @@ want this.</a:documentation>
     <ref name="prognostic_scalar_stat_options"/>
     <ref name="scalar_convergence_options"/>
     <ref name="prognostic_detector_options"/>
+    <ref name="prognostic_particle_options"/>
     <ref name="scalar_steady_state_options"/>
     <ref name="adaptivity_options_prognostic_scalar_field"/>
     <ref name="interpolation_algorithm_scalar"/>
@@ -3548,6 +3652,7 @@ guided search particle tracking</a:documentation>
     <ref name="diagnostic_scalar_stat_options"/>
     <ref name="scalar_convergence_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="scalar_steady_state_options"/>
     <ref name="adaptivity_options_scalar_field"/>
     <optional>
@@ -3562,12 +3667,14 @@ guided search particle tracking</a:documentation>
     <ref name="diagnostic_output_options"/>
     <ref name="diagnostic_scalar_stat_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
   </define>
   <!-- Default child of diagnostic scalar field -->
   <define name="diagnostic_scalar_field_tidal_range">
     <ref name="diagnostic_output_options"/>
     <ref name="diagnostic_scalar_stat_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="adaptivity_options_scalar_field"/>
     <element name="spin_up_time">
       <ref name="real"/>
@@ -3583,6 +3690,7 @@ guided search particle tracking</a:documentation>
     <ref name="diagnostic_vector_stat_options"/>
     <ref name="vector_convergence_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="vector_steady_state_options"/>
     <ref name="adaptivity_options_vector_field"/>
     <optional>
@@ -3615,6 +3723,7 @@ bed shear stress. Valid for non parameterised velocity boundaries.</a:documentat
     <ref name="diagnostic_output_options"/>
     <ref name="diagnostic_vector_stat_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="adaptivity_options_vector_field"/>
   </define>
   <!--
@@ -3719,6 +3828,7 @@ formulations</a:documentation>
     <ref name="diagnostic_vector_stat_options"/>
     <ref name="vector_convergence_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="vector_steady_state_options"/>
     <ref name="adaptivity_options_vector_field"/>
     <optional>
@@ -3734,6 +3844,7 @@ formulations</a:documentation>
     <ref name="diagnostic_vector_stat_options"/>
     <ref name="vector_convergence_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="vector_steady_state_options"/>
     <ref name="adaptivity_options_vector_field"/>
     <optional>
@@ -3746,6 +3857,7 @@ formulations</a:documentation>
     <ref name="diagnostic_scalar_stat_options"/>
     <ref name="scalar_convergence_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="scalar_steady_state_options"/>
     <ref name="adaptivity_options_scalar_field"/>
     <optional>
@@ -3761,6 +3873,7 @@ formulations</a:documentation>
     <ref name="diagnostic_scalar_stat_options"/>
     <ref name="scalar_convergence_options"/>
     <ref name="diagnostic_detector_options"/>
+    <ref name="diagnostic_particle_options"/>
     <ref name="scalar_steady_state_options"/>
     <ref name="adaptivity_options_scalar_field"/>
     <optional>
@@ -4622,6 +4735,48 @@ i.e. excluding the components</a:documentation>
   <define name="prescribed_detector_options">
     <ref name="detector_options_disabled_default"/>
   </define>
+  <!-- Options for whether a field is to be included in particles. -->
+  <define name="particle_options_enabled_default">
+    <element name="particles">
+      <a:documentation>Specify what is added to particles</a:documentation>
+      <choice>
+        <element name="include_in_particles">
+          <a:documentation>This field is included at each particle location.</a:documentation>
+          <ref name="comment"/>
+        </element>
+        <element name="exclude_from_particles">
+          <a:documentation>This field is not included at each particle location.</a:documentation>
+          <ref name="comment"/>
+        </element>
+      </choice>
+    </element>
+  </define>
+  <!-- Options for whether a field is to be included in particles. -->
+  <define name="particle_options_disabled_default">
+    <element name="particles">
+      <a:documentation>Specify what is added to particles</a:documentation>
+      <choice>
+        <element name="exclude_from_particles">
+          <a:documentation>This field is not included at each particle location.</a:documentation>
+          <ref name="comment"/>
+        </element>
+        <element name="include_in_particles">
+          <a:documentation>This field is included at each particle location.</a:documentation>
+          <ref name="comment"/>
+        </element>
+      </choice>
+    </element>
+  </define>
+  <!-- Particle defaults off for prognostic, diagnostic and prescribed fields -->
+  <define name="prognostic_particle_options">
+    <ref name="particle_options_disabled_default"/>
+  </define>
+  <define name="diagnostic_particle_options">
+    <ref name="particle_options_disabled_default"/>
+  </define>
+  <define name="prescribed_particle_options">
+    <ref name="particle_options_disabled_default"/>
+  </define>
   <define name="generic_aliased_field">
     <attribute name="material_phase_name">
       <data type="string"/>
@@ -4629,6 +4784,46 @@ i.e. excluding the components</a:documentation>
     <attribute name="field_name">
       <data type="string"/>
     </attribute>
+  </define>
+  <define name="generic_particle_field">
+    <choice>
+      <element name="constant">
+        <a:documentation>Constant value</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="python">
+        <a:documentation>Python function prescribing real input. Functions should be of the form:
+
+ def val(X, t):
+    # Function code
+    return # Return value
+
+where X is a tuple of length geometry dimension.</a:documentation>
+        <ref name="python_code"/>
+      </element>
+      <element name="python_fields">
+        <a:documentation>Python function prescribing real input. Functions should be of the form:
+
+ def val (X, t, fields):
+    # Function code
+    return # Return value
+
+where X is a tuple of length geometry dimension.</a:documentation>
+        <ref name="python_code"/>
+      </element>
+      <element name="from_checkpoint_file">
+        <a:documentation>File containing the particle positions in binary form</a:documentation>
+        <attribute name="file_name">
+          <data type="string"/>
+        </attribute>
+        <element name="format">
+          <a:documentation>The format of the input file containing field data.</a:documentation>
+          <element name="string_value">
+            <value>binary</value>
+          </element>
+        </element>
+      </element>
+    </choice>
   </define>
   <!-- This is the choice of additional scalar field to be solved for -->
   <define name="scalar_field_choice">
@@ -4661,6 +4856,9 @@ i.e. excluding the components</a:documentation>
           </element>
           <element name="aliased">
             <ref name="generic_aliased_field"/>
+          </element>
+          <element name="particles">
+            <ref name="generic_particle_field"/>
           </element>
         </choice>
       </element>
@@ -4830,6 +5028,7 @@ requires a distinct name for the options dictionary.</a:documentation>
             <ref name="prognostic_scalar_stat_options"/>
             <ref name="scalar_convergence_options"/>
             <ref name="prognostic_detector_options"/>
+            <ref name="prognostic_particle_options"/>
             <ref name="scalar_steady_state_options"/>
             <ref name="adaptivity_options_prognostic_scalar_field"/>
             <ref name="interpolation_algorithm_scalar"/>
@@ -5369,7 +5568,9 @@ Required multiphase problem types</a:documentation>
                       }|
                       element aliased {
                          generic_aliased_field
-                      }
+                      }|
+        		 element particles {
+        		 }
                    )
                }
       -->
@@ -8632,6 +8833,7 @@ If not selected boundary conditions are applied strongly.</a:documentation>
     <ref name="prognostic_scalar_stat_options"/>
     <ref name="scalar_convergence_options"/>
     <ref name="prognostic_detector_options"/>
+    <ref name="prognostic_particle_options"/>
     <ref name="scalar_steady_state_options"/>
     <ref name="adaptivity_options_scalar_field"/>
     <optional>

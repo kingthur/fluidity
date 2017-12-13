@@ -2,7 +2,7 @@
 
 <testproblem>
   <name>lagrangian_detectors_increasing_rotation</name>
-  <owner userid="drhodrid"/>
+  <owner userid="cmath"/>
   <tags>flml parallel zoltan</tags>
   <problem_definition length="short" nprocs="4">
     <command_line>
@@ -61,7 +61,7 @@ print "max error",abs(last_locations_error).max()
 import numpy as np
 from fluidity_tools import stat_parser
 s = stat_parser("lagrangian_detectors.detectors")
-attributes_error_1 = np.zeros((2,3))
+attributes_error_1 = np.zeros((5,3))
     
 attributes_error_1[0,0] = s['Single_Lagr_1']['position'][0][0] - s['Single_Lagr_1']['attributes'][0][-1]
 attributes_error_1[1,0] = s['Single_Lagr_1']['position'][1][0] - s['Single_Lagr_1']['attributes'][1][-1]
@@ -69,18 +69,31 @@ attributes_error_1[0,1] = s['Single_Lagr_2']['position'][0][0] - s['Single_Lagr_
 attributes_error_1[1,1] = s['Single_Lagr_2']['position'][1][0] - s['Single_Lagr_2']['attributes'][1][-1]
 attributes_error_1[0,2] = s['Single_Lagr_3']['position'][0][0] - s['Single_Lagr_3']['attributes'][0][-1]
 attributes_error_1[1,2] = s['Single_Lagr_3']['position'][1][0] - s['Single_Lagr_3']['attributes'][1][-1]
+
+attributes_error_1[2,0] = s['Single_Lagr_1']['position'][0][0] - s['Single_Lagr_1']['attributes'][2][-1]
+attributes_error_1[3,0] = s['Single_Lagr_1']['position'][1][0] - s['Single_Lagr_1']['attributes'][3][-1]
+attributes_error_1[4,0] = s['Single_Lagr_1']['position'][0][0] - s['Single_Lagr_1']['attributes'][4][-1]
+attributes_error_1[2,1] = s['Single_Lagr_2']['position'][0][0] - s['Single_Lagr_2']['attributes'][2][-1]
+attributes_error_1[3,1] = s['Single_Lagr_2']['position'][1][0] - s['Single_Lagr_2']['attributes'][3][-1]
+attributes_error_1[4,1] = s['Single_Lagr_2']['position'][0][0] - s['Single_Lagr_2']['attributes'][4][-1]
+attributes_error_1[2,2] = s['Single_Lagr_3']['position'][0][0] - s['Single_Lagr_3']['attributes'][2][-1]
+attributes_error_1[3,2] = s['Single_Lagr_3']['position'][1][0] - s['Single_Lagr_3']['attributes'][3][-1]
+attributes_error_1[4,2] = s['Single_Lagr_3']['position'][0][0] - s['Single_Lagr_3']['attributes'][4][-1]
     </variable>
     <variable name="attributes_error_2" language="python">
 from fluidity_tools import stat_parser
 import numpy as np
 
 s = stat_parser('lagrangian_detectors.detectors')
-attributes_error_2 = np.zeros((2,100))
+attributes_error_2 = np.zeros((5,100))
 
 for i in range(100):
     name = 'Steve_' + str(i+1).zfill(3)
     attributes_error_2[0,i] = s[name]['position'][0][0] - s[name]['attributes'][0][-1]
     attributes_error_2[1,i] = s[name]['position'][1][0] - s[name]['attributes'][1][-1]
+    attributes_error_2[2,i] = s[name]['position'][0][0] - s[name]['attributes'][2][-1]
+    attributes_error_2[3,i] = s[name]['position'][1][0] - s[name]['attributes'][3][-1]
+    attributes_error_2[4,i] = s[name]['position'][0][0] - s[name]['attributes'][4][-1]
 print "max error",abs(attributes_error_2).max()
     </variable>
     <variable name="attributes_error_3" language="python">
@@ -88,12 +101,15 @@ from fluidity_tools import stat_parser
 import numpy as np
 
 s = stat_parser('lagrangian_detectors.detectors')
-attributes_error_3 = np.zeros((2,60))
+attributes_error_3 = np.zeros((5,60))
 
 for i in range(60):
     name = 'Bob_' + str(i+1).zfill(2)
     attributes_error_3[0,i] = s[name]['position'][0][0] - s[name]['attributes'][0][-1]
     attributes_error_3[1,i] = s[name]['position'][1][0] - s[name]['attributes'][1][-1]
+    attributes_error_3[2,i] = s[name]['position'][0][0] - s[name]['attributes'][2][-1]
+    attributes_error_3[3,i] = s[name]['position'][1][0] - s[name]['attributes'][3][-1]
+    attributes_error_3[4,i] = s[name]['position'][0][0] - s[name]['attributes'][4][-1]
 print "max error",abs(attributes_error_3).max()
     </variable>
   </variables>

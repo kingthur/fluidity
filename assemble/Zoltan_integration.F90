@@ -1911,16 +1911,31 @@ module zoltan_integration
     real, allocatable :: send_buff(:,:), recv_buff(:,:)
     integer :: attribute_dims !!!chris hack
     logical do_broadcast
-    type(element_type), pointer :: shape  
+    type(element_type), pointer :: shape
+    
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles   
 
     ewrite(1,*) "In update_detector_list_element"
 
     send_count=0
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+    
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
+    
     do j = 1, size(detector_list_array)
        detector_list => detector_list_array(j)%ptr
        ewrite(2,*) "Length of detector list to be updated: ", detector_list%length
@@ -2065,6 +2080,9 @@ module zoltan_integration
 
     type(detector_list_ptr), dimension(:), pointer :: detector_list_array => null()
     type(detector_type), pointer :: detector => null(), add_detector => null()
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
 
     ewrite(1,*) 'in transfer_fields'
     
@@ -2097,12 +2115,21 @@ module zoltan_integration
     allocate(zoltan_global_ndets_in_ele(num_export))
     zoltan_global_ndets_in_ele(:) = 0
 
-    ! calculate the amount of data to be transferred per detector
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+    !
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
     
     zoltan_global_ndims = zoltan_global_zz_positions%dim
     zoltan_global_ndata_per_det = detector_buffer_size(zoltan_global_ndims, attribute_dims, .false.)  !chris hack

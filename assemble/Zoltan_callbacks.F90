@@ -8,6 +8,7 @@ module zoltan_callbacks
   use zoltan
   use spud
   use global_parameters, only: real_size, OPTION_PATH_LEN
+  use futils, only: int2str
   use fldebug
   use data_structures
   use mpi_interfaces
@@ -1028,14 +1029,28 @@ contains
     integer :: old_universal_element_number, old_local_element_number, dataSize
     integer :: attribute_dims !chris hack
 
-    type(detector_type), pointer :: detector => null(), detector_to_delete => null()    
+    type(detector_type), pointer :: detector => null(), detector_to_delete => null()
+
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
 
     ewrite(1,*) "In zoltan_cb_pack_fields"
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
 
     total_det_packed=0
     do i=1,num_ids
@@ -1181,15 +1196,29 @@ contains
     integer :: attribute_dims
     type(detector_type), pointer :: detector => null()
     type(element_type), pointer :: shape => null()
+
+    !chris hacks
+    integer :: nphases, p, nfields, f
+    logical :: particles
     
     ewrite(1,*) "In zoltan_cb_unpack_fields"
 
     total_det_unpacked=0
-    if (have_option("/io/detectors/detector_attributes")) then
-       call get_option("/io/detectors/detector_attributes/attribute_dimensions", attribute_dims) !chris hack
-    else
-       attribute_dims=0
-    end if
+
+    !count the number of attributes in particles
+    attribute_dims=0
+    nphases = option_count('/material_phase')  
+    do p = 0, nphases-1
+       nfields = option_count('/material_phase[' &
+            //int2str(p)//']/scalar_field')
+       do f = 0,nfields-1
+          particles = have_option('/material_phase['// &
+               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
+          if (particles) then
+             attribute_dims=attribute_dims+1
+          end if
+       end do
+    end do
     
     do i=1,num_ids
        

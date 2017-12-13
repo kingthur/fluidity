@@ -58,7 +58,6 @@ contains
     type(picker_type), intent(out) :: picker
     type(vector_field), intent(in) :: positions
     character(len = *), optional, intent(in) :: name
-    
     call node_owner_finder_set_input(picker%picker_id, positions)
     ewrite(2, *) "New picker ID: ", picker%picker_id
     
@@ -68,7 +67,7 @@ contains
        call set_picker_name(picker, empty_name)
     end if
     picker%last_mesh_movement = eventcount(EVENT_MESH_MOVEMENT)
-    call addref(picker)   
+    call addref(picker)
   end subroutine allocate_picker
 
   subroutine initialise_picker(positions)

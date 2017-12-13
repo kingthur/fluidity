@@ -107,7 +107,6 @@ contains
     !! If present and .false., do not perform a global inquiry across all
     !! processes
     logical, optional, intent(in) :: global
-   
     call initialise_picker(positions)
    
     call node_owner_finder_find(positions%picker%ptr%picker_id, positions, coord, ele, global = global)
@@ -119,8 +118,7 @@ contains
         ! coord information
         local_coord = huge(0.0)
       end if
-    end if
-        
+    end if  
   end subroutine picker_inquire_single_position
   
   subroutine picker_inquire_multiple_positions_xyz(positions, coordsx, coordsy, coordsz, eles, local_coords, global)
