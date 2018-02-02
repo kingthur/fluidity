@@ -47,7 +47,7 @@ module detector_tools
             delete, delete_all, pack_detector, unpack_detector, &
             detector_value, set_detector_coords_from_python, &
             detector_buffer_size, set_particle_attribute_from_python, &
-            set_particle_fields_from_python !chris hack
+            set_particle_fields_from_python
 
   interface insert
      module procedure insert_into_detector_list
@@ -310,16 +310,16 @@ contains
 
   function detector_buffer_size(ndims,attribute_dims, have_update_vector, nstages)
     ! Returns the number of reals we need to pack a detector
-    integer, intent(in) :: ndims, attribute_dims !chris hack
+    integer, intent(in) :: ndims, attribute_dims
     logical, intent(in) :: have_update_vector
     integer, intent(in), optional :: nstages
     integer :: detector_buffer_size
 
     if (have_update_vector) then
        assert(present(nstages))
-       detector_buffer_size=(nstages+2)*ndims+3+attribute_dims !!chris hacks, was +3
+       detector_buffer_size=(nstages+2)*ndims+3+attribute_dims
     else
-       detector_buffer_size=ndims+4+attribute_dims !!was +4
+       detector_buffer_size=ndims+4+attribute_dims
     end if
 
   end function detector_buffer_size
@@ -331,14 +331,14 @@ contains
     ! and we also pack update_vector and k
     type(detector_type), pointer, intent(in) :: detector
     real, dimension(:), intent(out) :: buff
-    integer, intent(in) :: ndims, attribute_dims !chris hack
+    integer, intent(in) :: ndims, attribute_dims
     integer, intent(in), optional :: nstages
 
     assert(size(detector%position)==ndims)
     if (attribute_dims.ne.0) then
        assert(size(detector%attributes)==attribute_dims)
     end if
-    assert(size(buff)>=ndims+3+attribute_dims) !!chris hack was +3
+    assert(size(buff)>=ndims+3+attribute_dims)
 
     ! Basic fields: ndims+3
     buff(1:ndims) = detector%position
@@ -346,23 +346,21 @@ contains
     buff(ndims+2) = detector%id_number
     buff(ndims+3) = detector%type
 
-    !!chris hack
     if (attribute_dims.ne.0) then
        buff(ndims+4:ndims+3+attribute_dims) = detector%attributes
     end if
 
     ! Lagrangian advection fields: (nstages+1)*ndims
     if (present(nstages)) then
-      ! ewrite(2,*) "Buffer size is", size(buff) !!chris hack
-       assert(size(buff)==(nstages+2)*ndims+3+attribute_dims) !! was +3
+       assert(size(buff)==(nstages+2)*ndims+3+attribute_dims)
        assert(allocated(detector%update_vector))
        assert(allocated(detector%k))
 
-       buff(ndims+attribute_dims+4:2*ndims+attribute_dims+3) = detector%update_vector !! was +4 and +3
-       buff(2*ndims+4+attribute_dims:(nstages+2)*ndims+3+attribute_dims) = reshape(detector%k,(/nstages*ndims/)) !!was +4 and +3
+       buff(ndims+attribute_dims+4:2*ndims+attribute_dims+3) = detector%update_vector
+       buff(2*ndims+4+attribute_dims:(nstages+2)*ndims+3+attribute_dims) = reshape(detector%k,(/nstages*ndims/))
     else
-       assert(size(buff)==ndims+4+attribute_dims) !! was +4
-       buff(ndims+4+attribute_dims) = detector%list_id !! was +4
+       assert(size(buff)==ndims+4+attribute_dims)
+       buff(ndims+4+attribute_dims) = detector%list_id
     end if
   end subroutine pack_detector
 
@@ -370,12 +368,12 @@ contains
     ! Unpacks the detector from buff and fills in the blanks
     type(detector_type), pointer :: detector
     real, dimension(:), intent(in) :: buff
-    integer, intent(in) :: ndims,attribute_dims !chris hack
+    integer, intent(in) :: ndims,attribute_dims
     type(integer_hash_table), intent(in), optional :: global_to_local
     type(vector_field), intent(in), optional :: coordinates
     integer, intent(in), optional :: nstages    
 
-    assert(size(buff)>=ndims+3+attribute_dims) !!chris hack was +3
+    assert(size(buff)>=ndims+3+attribute_dims)
     if (.not. allocated(detector%position)) then
        allocate(detector%position(ndims))
     end if
@@ -387,7 +385,7 @@ contains
     detector%element = buff(ndims+1)
     detector%id_number = buff(ndims+2)
     detector%type = buff(ndims+3)
-    !chris hack
+
     if (attribute_dims.ne.0) then
        if (attribute_dims==1) then
           detector%attributes = buff(ndims+4)
@@ -410,26 +408,26 @@ contains
     end if
     ! Lagrangian advection fields: (nstages+1)*ndims
     if (present(nstages)) then
-       assert(size(buff)==(nstages+2)*ndims+3+attribute_dims)!!was +3
+       assert(size(buff)==(nstages+2)*ndims+3+attribute_dims)
 
        ! update_vector, dimension(ndim)
        if (.not. allocated(detector%update_vector)) then
           allocate(detector%update_vector(ndims))
        end if       
-       detector%update_vector = reshape(buff(ndims+4+attribute_dims:2*ndims+3+attribute_dims),(/ndims/))!!was +4 and +3
+       detector%update_vector = reshape(buff(ndims+4+attribute_dims:2*ndims+3+attribute_dims),(/ndims/))
 
        ! k, dimension(nstages:ndim)
        if (.not. allocated(detector%k)) then
           allocate(detector%k(nstages,ndims))
        end if  
-       detector%k = reshape(buff(2*ndims+4+attribute_dims:(nstages+2)*ndims+3+attribute_dims),(/nstages,ndims/))!!was +4 and +3
+       detector%k = reshape(buff(2*ndims+4+attribute_dims:(nstages+2)*ndims+3+attribute_dims),(/nstages,ndims/))
 
        ! If update_vector still exists, we're not done moving
        detector%search_complete=.false.
     else
-       assert(size(buff)==ndims+4+attribute_dims)!!was +4
+       assert(size(buff)==ndims+4+attribute_dims)
 
-       detector%list_id = buff(ndims+4+attribute_dims)!!was +4
+       detector%list_id = buff(ndims+4+attribute_dims)
        detector%search_complete=.true.
     end if
   end subroutine unpack_detector
@@ -536,25 +534,24 @@ contains
     end if
   end subroutine set_particle_attribute_from_python
 
-  subroutine set_particle_fields_from_python(state, detector, attribute, func, time)
+  subroutine set_particle_fields_from_python(state, detector, attribute, func, time, field_name)
     type(detector_type), pointer, intent(in) :: detector
     type(state_type), dimension(:), intent(in) :: state
     real, intent(inout) :: attribute
     character(len=*), intent(in) :: func
+    character(len=*), dimension(:), intent(in) :: field_name
     real, intent(in) :: time
     real, allocatable, dimension(:) :: position
     real, allocatable, dimension(:) :: fields
     real :: value
     real :: lvx,lvy,lvz
     character(len=FIELD_NAME_LEN) :: buffer !set len as number
-    character(len=FIELD_NAME_LEN), allocatable, dimension(:) :: fieldnames
 
     type(scalar_field), pointer :: sfield
     character(len=FIELD_NAME_LEN) :: name
     integer :: phase, i, j, nfields, narray, nprescribed, ndiagnostic, nprognostic
-    integer :: dim, p, f, stat, num_fields
+    integer :: dim, p, f, stat, num_fields, k
     logical :: particles_f
-
 
     !get position of particle for function
     call get_option("/geometry/dimension",dim)
@@ -576,18 +573,9 @@ contains
       lvz=position(3)
     end select
 
-    !count number of fields being included
-    nprescribed = option_count('/material_phase/scalar_field/prescribed/particles/include_in_particles')
-    ndiagnostic = option_count('/material_phase/scalar_field/diagnostic/particles/include_in_particles')
-    nprognostic = option_count('/material_phase/scalar_field/prognostic/particles/include_in_particles')
-    narray = nprescribed + nprognostic + ndiagnostic
-
-    i = 1
     num_fields=0
-    allocate(fields(narray))
-    allocate(fieldnames(narray))
-    !check all phases with "include_in_detectors" options
-    do phase=1,size(state)  !!!!make sure this actually works
+    allocate(fields(size(field_name)))
+    do phase=1,size(state)
        nfields = option_count('/material_phase[' &
             //int2str(p)//']/scalar_field')
        do f = 1, nfields
@@ -596,106 +584,106 @@ contains
           if (.not.particles_f) then
              call get_option('material_phase['//int2str(phase-1)//']/scalar_field['//int2str(f-1)//']/name', name)
              sfield => extract_scalar_field(state(phase),name)
-             ewrite(2,*) "test flag", name
-             ewrite(2,*) sfield%option_path
-             ewrite(2,*)trim(sfield%option_path)//"prescribed/particles/include_in_particles"
              if (have_option(trim(sfield%option_path)//"/prescribed/particles/include_in_particles").or. &
                   have_option(trim(sfield%option_path)//"/diagnostic/particles/include_in_particles").or. &
-                  have_option(trim(sfield%option_path)//"/prognostic/particles/include_in_particles")) then 
-             
-                value = detector_value(sfield, detector)  !set as individual field value (in field array)
-                buffer = trim(sfield%name) !etc, set so we know where each field is
-                fields(i) = value
-                num_fields = num_fields+1
-                ewrite(2,*) "test flag 2", name, fields(i), num_fields
-                ! fieldnames(i) = buffer
-                i = i + 1
+                  have_option(trim(sfield%option_path)//"/prognostic/particles/include_in_particles")) then
+                
+                value = detector_value(sfield, detector)  
+                do j=1,size(field_name)
+                   if (name==field_name(j)) then
+                      fields(j) = value
+                      num_fields = num_fields+1
+                   end if
+                end do
              end if
           end if
        end do
     end do
     
-    !python routine to read in function, identify fields used and return field order
-    !returns error if fields in func are not included in fields array
-    
-    !call set_fields_attributes(func, len(func), fields, fieldnames, field_order)
-    ewrite(2,*) "num_fields", num_fields, fields
-    ewrite(2,*) "narray", narray
-    if (narray.ne.num_fields) then
-       ewrite(2,*) "number of fields with include_in_particles is not consistent"
+    if (size(field_name).ne.num_fields) then
+       ewrite(2,*) "number of fields is not consistent"
        FLExit("Dying")
     end if
     
     call set_particles_fields_from_python(func, len(func), dim, &
-         lvx, lvy, lvz, time, num_fields, fields, attribute, stat) !field_order, stat)
+         lvx, lvy, lvz, time, num_fields, fields, attribute, stat)
     if (stat/=0) then
        ewrite(-1, *) "Python error, Python string was:"
        ewrite(-1 , *) trim(func)
        FLExit("Dying")
     end if
   end subroutine set_particle_fields_from_python
-  
 
-!!$  subroutine calculate_particle_attributes_state(states, state_index, attribute, option_buffer, position, element, current_time, dt)!ele number or location
-!!$    !!!Set particle attributes from Python state
-!!$    type(state_type), dimension(:), target, intent(inout) :: states
-!!$    integer, intent(in) :: state_index
-!!$
-!!$    real, intent(in) :: current_time
-!!$    real, intent(in) :: dt
-!!$    real, intent(inout) :: attribute
-!!$    real, dimension(*), intent(in) :: position !!!check it works
-!!$
-!!$#ifdef HAVE_NUMPY    
-!!$    character(len = PYTHON_FUNC_LEN) :: pycode
-!!$    character(len = 30) :: buffer
-!!$    character(len = OPTION_PATH_LEN) :: material_phase_support
-!!$    character(len = *) :: option_buffer   !!!check it works
-!!$    type(state_type), pointer :: this_state
-!!$
-!!$    ewrite(2,*) 'in calculate_particle_attributes_state'
-!!$    !Clear up to make sure nothing else interferes
-!!$    call python_reset()   !!!!Make sure all of these calls are imported in the module
-!!$
-!!$    call get_option(trim(option_buffer)&
-!!$         //"/algorithm/material_phase_support",material_phase_support)
-!!$
-!!$    ewrite(2,*) 'material_phase_support: '//trim(material_phase_support)
-!!$    select case(material_phase_support)
-!!$    case("single")
-!!$       call python_add_state(states(state_index))
-!!$
-!!$    case ("multiple")
-!!$       call python_add_states(states)
-!!$       this_state=>states(state_index)
-!!$       call python_run_string("state = states['"//trim(this_state%name)//"']")
-!!$
-!!$    case default
-!!$       ewrite(0,*) trim(material_phase_support)&
-!!$            //" is not a valid value for material_phase_support"
-!!$       FLExit("Options file error")
-!!$    end select
-!!$
-!!$    !need to find the location of the attribute, or ele number of attribute
-!!$    !could bring coord and call picker in here, then put ele number into python state
-!!$    !call python_run_string("field = state.scalar_fields['"//trim(s_field%name)//"']")
-!!$    write(buffer,*) current_time
-!!$    call python_run_string("time="//trim(buffer))
-!!$    write(buffer,*) dt
-!!$    call python_run_string("dt="//trim(buffer))  
-!!$      
-!!$    ! And finally run the user's code
-!!$    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm",pycode)!!!!fix option path
-!!$    call python_run_string(trim(pycode))
-!!$    
-!!$    ! Cleanup
-!!$    call python_reset()
-!!$#else
-!!$    FLAbort("Python diagnostic fields require NumPy, which cannot be located.")
-!!$#endif
-!!$
-!!$    ewrite(2,*) 'leaving calculate_particle_attributes_state'
-!!$    
-!!$  end subroutine calculate_particle_attributes_state
+  subroutine update_particle_fields_from_python(state, detector_list, func, time)
+    type(detector_linked_list), intent(inout) :: detector_list
+    type(state_type), dimension(:), intent(in) :: state
+    character(len=*), intent(in) :: func
+    real, intent(in) :: time
+    real, allocatable, dimension(:) :: position
+    real, allocatable, dimension(:) :: fields
+    real :: value
+    real :: lvx,lvy,lvz
+
+    real :: attribute
+    type(scalar_field), pointer :: sfield
+    type(detector_type), pointer :: detector
+    character(len=FIELD_NAME_LEN) :: name
+    integer :: phase, i, j, nfields, narray, nprescribed, ndiagnostic, nprognostic
+    integer :: dim, p, f, stat, num_fields, k
+    logical :: particles_f
+
+    num_fields = detector_list%num_pfields
+    allocate(fields(num_fields))
+   ! allocate(fieldnames(num_fields))
+
+    detector => detector_list%first
+
+    !get position of particle for function
+    call get_option("/geometry/dimension",dim)
+    
+    allocate(position(dim))
+    position = detector%position
+
+    select case(dim)
+    case(1)
+      lvx=position(1)
+      lvy=0
+      lvz=0
+    case(2)
+      lvx=position(1)
+      lvy=position(2)
+      lvz=0
+    case(3)
+      lvx=position(1)
+      lvy=position(2)
+      lvz=position(3)
+   end select
+   
+    do j=1, detector_list%length   
+       k = 1
+       do phase=1,size(state)
+          if (size(detector_list%particle_fields(phase)%ptr)>0) then
+             do i = 1,size(detector_list%particle_fields(phase)%ptr)
+                sfield => extract_scalar_field(state(phase),detector_list%particle_fields(phase)%ptr(i))
+                value = detector_value(sfield,detector)
+                fields(k) = value
+                k=k+1
+             end do
+          end if
+       end do
+
+       call set_particles_fields_from_python(func, len(func), dim, &
+            lvx, lvy, lvz, time, num_fields, fields, attribute, stat)
+       if (stat/=0) then
+          ewrite(-1, *) "Python error, Python string was:"
+          ewrite(-1 , *) trim(func)
+          FLExit("Dying")
+       end if
+
+       detector%attributes = attribute
+       detector => detector%next
+    end do 
+                    
+  end subroutine update_particle_fields_from_python
   
 end module detector_tools

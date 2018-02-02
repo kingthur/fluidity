@@ -1027,11 +1027,10 @@ contains
     type(vector_field), pointer :: vfield
     type(tensor_field), pointer :: tfield
     integer :: old_universal_element_number, old_local_element_number, dataSize
-    integer :: attribute_dims !chris hack
+    integer :: attribute_dims
 
     type(detector_type), pointer :: detector => null(), detector_to_delete => null()
 
-    !chris hacks
     integer :: nphases, p, nfields, f
     logical :: particles
 
@@ -1197,7 +1196,6 @@ contains
     type(detector_type), pointer :: detector => null()
     type(element_type), pointer :: shape => null()
 
-    !chris hacks
     integer :: nphases, p, nfields, f
     logical :: particles
     

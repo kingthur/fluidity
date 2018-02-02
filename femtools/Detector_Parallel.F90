@@ -136,10 +136,9 @@ contains
     integer :: i,j,k, nprocs, all_send_lists_empty, processor_owner, bcast_count, &
                ierr, ndata_per_det, bcast_rounds, round, accept_detector
     integer, dimension(:), allocatable :: ndets_being_bcast
-    integer :: attribute_dims !!chris hack
+    integer :: attribute_dims
     real, allocatable :: send_buff(:), recv_buff(:)
     type(element_type), pointer :: shape
-    !chris hacks
     integer :: nphases, p, nfields, f
     logical :: particles
 
@@ -238,7 +237,7 @@ contains
        bcast_rounds = maxval(ndets_being_bcast)
        call allmax(bcast_rounds)
        do round=1, bcast_rounds
-          ndata_per_det = detector_buffer_size(xfield%dim, attribute_dims, .false.) !!!chris hack
+          ndata_per_det = detector_buffer_size(xfield%dim, attribute_dims, .false.)
 
           ! Broadcast detectors whose new owner we can't identify
           do i=1,getnprocs()
@@ -340,9 +339,8 @@ contains
                halo_level, nprocs, IERROR
     integer, parameter ::TAG=12
     integer, dimension(:), allocatable :: sendRequest, status
-    integer :: attribute_dims !chris hack
+    integer :: attribute_dims
     logical :: have_update_vector
-    !chris hacks
     integer :: nphases, p, nfields, f
     logical :: particles
 
@@ -385,9 +383,9 @@ contains
     have_update_vector=associated(detector_list%move_parameters)
     if(have_update_vector) then
        n_stages=detector_list%move_parameters%n_stages
-       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector,n_stages) !chris hack
+       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector,n_stages)
     else
-       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector)!!!chris hack
+       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector)
     end if
     
     ! Send to all procs

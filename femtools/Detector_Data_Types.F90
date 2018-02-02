@@ -67,7 +67,7 @@ module detector_data_types
      real, dimension(:,:), allocatable :: k
      !! RK update destination vector (size dim)
      real, dimension(:), allocatable :: update_vector
-     !!!Chris hack
+     !! Particle attributes
      real, dimension(:), allocatable :: attributes
      !! Have we completed the search?
      logical :: search_complete
@@ -75,34 +75,6 @@ module detector_data_types
      TYPE (detector_type), POINTER :: next=> null()
      TYPE (detector_type), POINTER :: previous=> null() 
   end type detector_type
-
-!!$  type particle_type
-!!$     !! Physical location of the particle.
-!!$     real, dimension(:), allocatable :: position
-!!$     !! Name of the particle in input and output.
-!!$     character(len=FIELD_NAME_LEN) :: name 
-!!$     !! Element number in which the particle lies.
-!!$     integer :: element
-!!$     !! Local coordinates of the particle in that element.
-!!$     real, dimension(:), allocatable :: local_coords
-!!$     !! Whether the particle is static or Lagrangian.
-!!$     integer :: type = STATIC_PARTICLE
-!!$     !! Identification number indicating the order in which the particles are read
-!!$     integer :: id_number
-!!$     !! ID of the parent list, needed for Zoltan to map the particle back
-!!$     integer :: list_id
-!!$     !! RK timestepping stages (first index is stage no., second index is dim)
-!!$     real, dimension(:,:), allocatable :: k
-!!$     !! RK update destination vector (size dim)
-!!$     real, dimension(:), allocatable :: update_vector
-!!$     !!!Chris hack
-!!$     real, dimension(:), allocatable :: attributes
-!!$     !! Have we completed the search?
-!!$     logical :: search_complete
-!!$     !! Pointers for detector linked lists
-!!$     TYPE (detector_type), POINTER :: next=> null()
-!!$     TYPE (detector_type), POINTER :: previous=> null()
-!!$  end type particle_type
 
   ! Parameters for lagrangian detector movement
   type rk_gs_parameters
@@ -138,6 +110,7 @@ module detector_data_types
 
      !! List of scalar fields to include on particles
      type(stringlist), dimension(:), allocatable :: particle_fields
+     integer :: num_pfields = 0   ! Total number of fields included in particles
 
      !! I/O parameters
      logical :: binary_output = .false.

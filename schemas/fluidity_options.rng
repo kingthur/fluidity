@@ -4810,11 +4810,19 @@ where X is a tuple of length geometry dimension.</a:documentation>
 
 where X is a tuple of length geometry dimension.</a:documentation>
         <ref name="python_code"/>
+        <oneOrMore>
+          <element name="field_name">
+            <a:documentation>Field name</a:documentation>
+            <attribute name="name">
+              <data type="string"/>
+            </attribute>
+          </element>
+        </oneOrMore>
       </element>
       <element name="from_checkpoint_file">
         <a:documentation>File containing the particle positions in binary form</a:documentation>
-        <attribute name="file_name">
-          <data type="string"/>
+        <attribute name="name">
+          <data type="string" datatypeLibrary=""/>
         </attribute>
         <element name="format">
           <a:documentation>The format of the input file containing field data.</a:documentation>

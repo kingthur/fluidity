@@ -117,7 +117,11 @@ module diagnostic_variables
 
   interface detector_field
      module procedure detector_field_scalar, detector_field_vector
-  end interface
+  end interface detector_field
+
+  interface particle_field
+     module procedure particle_field_scalar
+  end interface particle_field
 
   ! List of registered diagnostic
   type registered_diagnostic_item
@@ -463,6 +467,21 @@ contains
     end if
 
   end function detector_field_vector
+
+  function particle_field_scalar(sfield)
+    !!< Return whether the supplied field should be included in the .detector file
+    logical :: particle_field_scalar
+    type(scalar_field), target, intent(in) :: sfield
+    
+    if (sfield%option_path=="".or.aliased(sfield)) then
+       particle_field_scalar=.false.
+    else
+       particle_field_scalar = have_option(&
+            trim(complete_field_path(sfield%option_path)) // &
+            "/particles/include_in_particles")
+    end if
+
+  end function particle_field_scalar
 
   subroutine initialise_walltime
     !!< Record the initial walltime, clock_rate and maximum clock count
@@ -1377,11 +1396,11 @@ contains
     real, dimension(attribute_dims) :: attributes
     real, dimension(attribute_dims), intent(in), optional :: attribute_vals
 
-    !chris hacks
-    integer :: nphases, p, nfields, f, i
+    integer :: nphases, p, nfields, f, i, j, k
     logical :: particles_c, particles_p, particles_f
     real :: const, attribute, time, dt
     character(len=PYTHON_FUNC_LEN) :: func
+    character(len=FIELD_NAME_LEN), allocatable, dimension(:) :: field_name
     character(len=OPTION_PATH_LEN) :: format, filename
     character(len=OPTION_PATH_LEN) :: option_buffer
 !    type(state_type), dimension(:) :: states  !!dimension?
@@ -1418,12 +1437,13 @@ contains
     detector%local_coords=lcoords
     detector%type=type
     detector%id_number=id
-!!!chris hack 
+
+    !Set attribute values if present
     if (attribute_dims.ne.0) then
        allocate(detector%attributes(attribute_dims))
        if (present(attribute_vals)) then
           detector%attributes=attribute_vals
-       else !loop phases and get ones with path, trim path and get values (check if python or constant)
+       else !Get attribute vals from input
           i=1
           nphases = option_count('/material_phase')
           do p = 0, nphases-1
@@ -1447,12 +1467,20 @@ contains
                    call set_particle_attribute_from_python(attribute, position, func, time)
                    detector%attributes(i)=attribute
                    i=i+1
-                else if (particles_f) then     !!!Maybe set this outside instead and pass in attribute vals?? would have state then
+                else if (particles_f) then
                    call get_option('/material_phase['// &
                         int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields', func)
-                   call set_particle_fields_from_python(state, detector, attribute, func, time)
+                   j=option_count('/material_phase['// &
+                        int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields/field_name')
+                   allocate(field_name(j))
+                   do k=0,j-1
+                       call get_option('/material_phase['// &
+                            int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields/field_name['//int2str(k)//']/name', field_name(k+1))
+                   end do
+                   call set_particle_fields_from_python(state, detector, attribute, func, time, field_name)
                    detector%attributes(i)=attribute
                    i=i+1
+                   deallocate(field_name)
                 end if
              end do
           end do
@@ -1478,13 +1506,13 @@ contains
     type(vector_field), pointer :: vfield, xfield
     real, allocatable, dimension(:,:) :: coords
     real, allocatable, dimension(:) :: detector_location
-    real, allocatable, dimension(:) :: attribute_vals !chris hack
-    real, allocatable, dimension(:) :: packed_buff !chris hack
+    real, allocatable, dimension(:) :: attribute_vals
+    real, allocatable, dimension(:) :: packed_buff
     real:: current_time
     character(len = OPTION_PATH_LEN) :: detectors_cp_filename, detector_file_filename
-    integer :: attribute_dims !!chris hack
+    integer :: attribute_dims
     integer :: attribute_dims2
-    !chris hacks
+
     integer :: nphases, p, nfields, f
     logical :: particles
     character(len=OPTION_PATH_LEN) :: name
@@ -1838,7 +1866,7 @@ contains
        
              if (default_stat%detector_group_names(j)==temp_name) then
                 read(default_stat%detector_checkpoint_unit) packed_buff
-                detector_location=packed_buff(1:dim) !chris hack, reshape?
+                detector_location=packed_buff(1:dim)
                 if (attribute_dims.NE.0) then
                    attribute_vals=packed_buff(dim+1:dim+attribute_dims)
                 end if
@@ -1859,7 +1887,7 @@ contains
 
              if (default_stat%detector_group_names(j)==temp_name) then
                 read(default_stat%detector_checkpoint_unit) packed_buff
-                detector_location=packed_buff(1:dim) !chris hack, reshape?
+                detector_location=packed_buff(1:dim)
                 if (attribute_dims.NE.0) then
                    attribute_vals=packed_buff(dim+1:dim+attribute_dims)
                 end if
@@ -1894,7 +1922,7 @@ contains
                 do m=1,default_stat%number_det_in_each_group(j)
                    write(detector_name, fmt) trim(temp_name)//"_", m
                    read(default_stat%detector_checkpoint_unit) packed_buff
-                   detector_location=packed_buff(1:dim) !chris hack, reshape?
+                   detector_location=packed_buff(1:dim)
                    if (attribute_dims.NE.0) then
                       attribute_vals=packed_buff(dim+1:dim+attribute_dims)
                    end if
@@ -1917,7 +1945,7 @@ contains
              call get_option(trim(buffer)//"/name", temp_name)
              if (default_stat%detector_group_names(j)==temp_name) then
                 read(default_stat%detector_checkpoint_unit) packed_buff
-                detector_location=packed_buff(1:dim) !chris hack, reshape?
+                detector_location=packed_buff(1:dim)
                 if (attribute_dims.NE.0) then
                    attribute_vals=packed_buff(dim+1:dim+attribute_dims)
                 end if
@@ -1952,7 +1980,7 @@ contains
                 do m=1,default_stat%number_det_in_each_group(j)
                    write(detector_name, fmt) trim(temp_name)//"_", m
                    read(default_stat%detector_checkpoint_unit) packed_buff
-                   detector_location=packed_buff(1:dim) !chris hack, reshape?
+                   detector_location=packed_buff(1:dim)
                    if (attribute_dims.NE.0) then
                       attribute_vals=packed_buff(dim+1:dim+attribute_dims)
                    end if
@@ -1967,10 +1995,37 @@ contains
              end if             
           end do
        end do
-
-       
-
     end if  ! from_checkpoint
+
+    allocate (default_stat%detector_list%particle_fields(size(state)))
+    particle_field_loop: do phase = 1,size(state)
+       material_phase_name = trim(state(phase)%name)
+    
+       field_count = 0
+       do i = 1,size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(i))
+          if (particle_field(sfield)) field_count = field_count + 1
+       end do
+       allocate(default_stat%detector_list%particle_fields(phase)%ptr(field_count))
+       default_stat%detector_list%num_pfields=default_stat%detector_list%num_pfields + field_count
+
+       field_count = 1
+       do i=1, size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(i))
+           if(.not. particle_field(sfield)) then
+              cycle
+           end if
+           
+           ! Store name of included scalar field
+           default_stat%detector_list%particle_fields(phase)%ptr(field_count)=state(phase)%scalar_names(i)
+           field_count = field_count + 1
+        end do
+           
+
+
+    end do particle_field_loop
+       
+    !Set type of output file
 
     default_stat%detector_list%binary_output = .true.
     if (have_option("/io/detectors/ascii_output").or.have_option("/particles/ascii_output")) then
@@ -2003,10 +2058,10 @@ contains
           write(default_stat%detector_list%output_unit, '(a)') trim(buffer)
           column=column+xfield%dim   ! xfield%dim == size(detector%position)
        end do positionloop
-       
-       !chris hack output for chris !!!edit this part to get names of attributes, do all individually.
+
+       ! Next columns contain attributes of particles
        if (attribute_dims.ne.0) then
-          chrisloop: do i=1,default_stat%detector_list%total_num_det!!! do inside this loop so they are ordered correctly
+          attributeloop: do i=1,default_stat%detector_list%total_num_det
              do p = 0, nphases-1
                 do f = 0,nfields-1
                    if (have_option('/material_phase['// &
@@ -2020,10 +2075,8 @@ contains
                    end if
                 end do
              end do
-          end do chrisloop
+          end do attributeloop
        end if
-
-       !end chris hack
      end if
 
      ! Loop over all fields in state and record the ones we want to output
@@ -2126,7 +2179,7 @@ contains
     !Get options for lagrangian detector movement
     if (check_any_lagrangian(default_stat%detector_list)) then
        if (have_option("/particles/lagrangian_timestepping")) then
-          call read_detector_move_options(default_stat%detector_list, "/particles") !!chris hack
+          call read_detector_move_options(default_stat%detector_list, "/particles")
        else
           call read_detector_move_options(default_stat%detector_list, "/io/detectors")
        end if
@@ -2874,13 +2927,13 @@ contains
 
     character(len=10) :: format_buffer
     integer :: i, j, k, phase, ele, check_no_det, totaldet_global
-    integer :: attribute_dims !!chris hack
+    integer :: attribute_dims
     real :: value
     real, dimension(:), allocatable :: vvalue
     type(scalar_field), pointer :: sfield
     type(vector_field), pointer :: vfield
     type(detector_type), pointer :: detector
-    !chris hacks
+
     integer :: nphases, p, nfields, f
     logical :: particles
 
@@ -2941,10 +2994,9 @@ contains
           detector => detector%next
        end do positionloop
 
-       !!!chris hack
        if (attribute_dims.ne.0) then
           detector => detector_list%first
-          chrisloop: do i=1,detector_list%length
+          attributeloop: do i=1,detector_list%length
              if(detector_list%binary_output) then
                 write(detector_list%output_unit) detector%attributes
              else
@@ -2954,10 +3006,8 @@ contains
              end if
              detector => detector%next
              
-          end do chrisloop
+          end do attributeloop
        end if
-       !!!end chris hack
-          
 
        phaseloop: do phase=1,size(state)
           if (size(detector_list%sfield_list(phase)%ptr)>0) then
@@ -3065,7 +3115,7 @@ contains
     integer :: i, j, phase, ierror, number_of_scalar_det_fields, realsize, dim, procno
     integer(KIND = MPI_OFFSET_KIND) :: location_to_write, offset
     integer :: number_of_vector_det_fields, number_total_columns
-    integer :: attribute_dims !!chris hack
+    integer :: attribute_dims
 
     real :: value
     real, dimension(:), allocatable :: vvalue
@@ -3073,7 +3123,6 @@ contains
     type(vector_field), pointer :: vfield
     type(detector_type), pointer :: node
     
-    !chris hacks
     integer :: nphases, p, nfields, f
     logical :: particles
     ewrite(2, *) "In write_mpi_out"
@@ -3112,7 +3161,7 @@ contains
     number_total_columns = 2 + &
                            ! Detector coordinates
                          & detector_list%total_num_det * dim + &
-                           ! Chris hack
+                           ! Particle attribute data
                          & detector_list%total_num_det * attribute_dims + &
                            ! Scalar detector data
                          & detector_list%total_num_det * detector_list%num_sfields + &
@@ -3149,22 +3198,19 @@ contains
     assert(.not. associated(node))
     location_to_write = location_to_write + detector_list%total_num_det * dim * realsize
 
-
-    !!chris hack
     if (attribute_dims.ne.0) then
        node => detector_list%first
-       chris_loop: do i = 1, detector_list%length
+       attribute_loop: do i = 1, detector_list%length
           assert(size(node%attributes) == attribute_dims)
           offset = location_to_write + (node%id_number - 1) * attribute_dims * realsize
 
           call mpi_file_write_at(detector_list%mpi_fh, offset, node%attributes, attribute_dims, getpreal(), MPI_STATUS_IGNORE, ierror)
           assert(ierror == MPI_SUCCESS)
           node => node%next
-       end do chris_loop
+       end do attribute_loop
        assert(.not. associated(node))
        location_to_write = location_to_write + detector_list%total_num_det * attribute_dims * realsize
     end if
-    !!!end chris hack
     
     allocate(vvalue(dim))
     state_loop: do phase = 1, size(state)

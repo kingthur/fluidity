@@ -167,7 +167,7 @@ contains
     type(detector_type), pointer :: node
     character(len = OPTION_PATH_LEN) :: detectors_cp_filename, path
     character(len = PREFIX_LEN) :: lpostfix
-    integer :: det_unit, i, j, IERROR, attribute_dims !!chris hack
+    integer :: det_unit, i, j, IERROR, attribute_dims
     integer :: static_dete, lagrangian_dete, det_arrays, array_dete_lag, &
       & total_dete_lag
     type(vector_field), pointer :: vfield
@@ -177,7 +177,6 @@ contains
     integer :: nints, realsize, dimen, total_num_det, number_total_columns
     real, dimension(:), allocatable :: buffer
 
-    !chris hacks
     integer :: nphases, p, nfields, f
     logical :: particles
     integer :: lagrangian_particle, particle_arrays, array_particles
@@ -256,7 +255,7 @@ contains
     !!< Writes detector last position into detectors file using MPI output 
     ! commands so that when running in parallel all processors can write at the same time information into the file at the right location.
     
-    call MPI_FILE_OPEN(MPI_COMM_FEMTOOLS, trim(detectors_cp_filename) // '_det.attributes.dat', MPI_MODE_CREATE + MPI_MODE_RDWR, MPI_INFO_NULL, fhdet, IERROR) !was .positions.dat chris hacks
+    call MPI_FILE_OPEN(MPI_COMM_FEMTOOLS, trim(detectors_cp_filename) // '_det.attributes.dat', MPI_MODE_CREATE + MPI_MODE_RDWR, MPI_INFO_NULL, fhdet, IERROR)
 
     ewrite(1,*) "after openning the IERROR is:", IERROR
 
@@ -291,7 +290,7 @@ contains
 
     end do
 
-    number_total_columns=total_num_det*dimen !+ total_num_det*attribute_dims !chris hack
+    number_total_columns=total_num_det*dimen
 
     node => default_stat%detector_list%first
 
@@ -339,7 +338,6 @@ contains
     character(len = FIELD_NAME_LEN), dimension(:), allocatable :: type_detectors
     character(len = 254) :: temp_string
 
-    !chris hacks
     integer :: lagrangian_particle, python_particles_func
     integer :: nphases, p, nfields, f
     logical :: particles_c, particles_p
@@ -451,7 +449,7 @@ contains
           FLAbort("Failed to set detectors options format when checkpointing detectors with option path " // "/io/detectors/detector_array")
        end if
     end do
-    deallocate(type_detectors)!!!
+    deallocate(type_detectors)
     !particle options
     do i = 0, lagrangian_particle-1  
        call delete_option("/particles/single_particle[" // int2str(0) // "]")
@@ -459,7 +457,7 @@ contains
 
     do i = 0, lagrangian_particle-1
 
-       temp_string=default_stat%detector_group_names(i+1+static_dete+lagrangian_dete+python_functions_or_files)!!!
+       temp_string=default_stat%detector_group_names(i+1+static_dete+lagrangian_dete+python_functions_or_files)
         
        call set_option_attribute("/particles/single_particle::" // trim(temp_string) // "/from_checkpoint_file/file_name", trim(filename), stat)
 
@@ -489,7 +487,7 @@ contains
     end do
 
     do i = 0, python_particles_func-1  
-        temp_string=default_stat%detector_group_names(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)!!!
+        temp_string=default_stat%detector_group_names(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)
 
         ewrite(1,*) 'In update_particles_options'
         ewrite(1,*) temp_string
@@ -498,15 +496,15 @@ contains
         ewrite(1,*) temp_string
 
         call set_option("/particles/particle_array::" // trim(temp_string) // "/number_of_particles/", &
-                & default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle), stat = stat) !!!
+                & default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle), stat = stat) 
 
         ewrite(1,*) 'In update_particles_options'
-        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)!!!
+        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)
 
         assert(any(stat == (/SPUD_NO_ERROR, SPUD_NEW_KEY_WARNING/)))
 
         ewrite(1,*) 'In update_particles_options'
-        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)!!!
+        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)
         
         call add_option("/particles/particle_array::" // trim(temp_string) // "/lagrangian", stat = stat) 
         assert(any(stat == (/SPUD_NO_ERROR, SPUD_NEW_KEY_WARNING/)))

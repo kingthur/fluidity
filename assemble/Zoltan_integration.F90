@@ -1909,11 +1909,10 @@ module zoltan_integration
     integer :: old_local_element_number, new_local_element_number, old_universal_element_number
     integer, allocatable :: ndets_being_sent(:)
     real, allocatable :: send_buff(:,:), recv_buff(:,:)
-    integer :: attribute_dims !!!chris hack
+    integer :: attribute_dims
     logical do_broadcast
     type(element_type), pointer :: shape
     
-    !chris hacks
     integer :: nphases, p, nfields, f
     logical :: particles   
 
@@ -2073,14 +2072,14 @@ module zoltan_integration
     
     integer :: old_universal_element_number, new_local_element_number, old_local_element_number
     integer :: state_no, field_no
-    integer :: attribute_dims !!!chris hack
+    integer :: attribute_dims
     type(scalar_field), pointer :: source_sfield, target_sfield
     type(vector_field), pointer :: source_vfield, target_vfield
     type(tensor_field), pointer :: source_tfield, target_tfield
 
     type(detector_list_ptr), dimension(:), pointer :: detector_list_array => null()
     type(detector_type), pointer :: detector => null(), add_detector => null()
-    !chris hacks
+
     integer :: nphases, p, nfields, f
     logical :: particles
 
@@ -2132,7 +2131,7 @@ module zoltan_integration
     end do
     
     zoltan_global_ndims = zoltan_global_zz_positions%dim
-    zoltan_global_ndata_per_det = detector_buffer_size(zoltan_global_ndims, attribute_dims, .false.)  !chris hack
+    zoltan_global_ndata_per_det = detector_buffer_size(zoltan_global_ndims, attribute_dims, .false.)
     ewrite(2,*) "Amount of data to be transferred per detector: ", zoltan_global_ndata_per_det
     
     head = 1
