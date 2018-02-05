@@ -543,7 +543,7 @@ contains
              end if
           end do
 
-          field_loop: do it = 1, ntsol !!!need to change this
+          field_loop: do it = 1, ntsol
              ewrite(2, "(a,i0,a,i0)") "Considering scalar field ", it, " of ", ntsol
              ewrite(1, *) "Considering scalar field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name)
 
