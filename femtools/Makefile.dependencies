@@ -249,7 +249,9 @@ Detector_Parallel.o ../include/detector_parallel.mod: Detector_Parallel.F90 \
 Detector_Tools.o ../include/detector_tools.mod: Detector_Tools.F90 \
    ../include/detector_data_types.mod ../include/elements.mod \
    ../include/embed_python.mod ../include/fdebug.h ../include/fields.mod \
-   ../include/fldebug.mod ../include/integer_hash_table_module.mod
+   ../include/fldebug.mod ../include/futils.mod \
+   ../include/global_parameters.mod ../include/integer_hash_table_module.mod \
+   ../include/state_module.mod
 
 ../include/dgtools.mod: Dgtools.o
 	@true
