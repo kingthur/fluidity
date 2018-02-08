@@ -1794,7 +1794,7 @@ contains
     character(len=*), optional, intent(in):: field_name
     logical, optional, intent(in):: dont_allocate_prognostic_value_spaces
 
-    logical :: is_prognostic, is_prescribed, is_diagnostic, is_aliased, is_particle
+    logical :: is_prognostic, is_prescribed, is_diagnostic, is_aliased
     ! paths for options and child fields
     character(len=OPTION_PATH_LEN) :: path, adapt_path
     ! Strings for names
@@ -1805,9 +1805,6 @@ contains
     
     is_aliased=have_option(trim(option_path)//"/aliased")
     if(is_aliased) return
-
-    is_particle=have_option(trim(option_path)//"/particles")
-    if(is_particle) return
 
     ! Save option_path
     path=trim(option_path)
@@ -3173,7 +3170,6 @@ contains
     integer :: periodic_mesh_count ! number of meshes with periodic_boundary_conition options
     ! logicals to find out if we have certain options
     logical :: is_aliased
-    logical :: is_particle
 
     ! Get number of meshes
     nmeshes=option_count("/geometry/mesh")
@@ -3348,8 +3344,7 @@ contains
 
           ! If field is not aliased check mesh name
           is_aliased=have_option(trim(path)//"/aliased")
-          is_particle=have_option(trim(path)//"/particles")
-          if((.not.is_aliased).and.(.not.is_particle)) then
+          if(.not.is_aliased) then
              call get_option(trim(complete_field_path(path))//"/mesh[0]/name", mesh_name)
              if (.not. have_option("/geometry/mesh::"//trim(mesh_name))) then
                 ewrite(-1,*) "Unknown mesh: ", trim(mesh_name)

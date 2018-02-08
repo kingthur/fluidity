@@ -329,26 +329,6 @@ start =
 	 ## Particle options
 	 element particles {
 	    (
-		  ## A single lagrangian particle
-                  element single_particle {
-                     attribute name { xsd:string },
-                     (
-                     ## This is the initial location of a particle that moves with the fluid velocity.
-                        element location {
-                           real_dim_vector
-                     }|
-                        ## File containing the particle positions in binary form
-                        element from_checkpoint_file {
-                           attribute file_name { xsd:string },
-                           ## The format of the input file containing field data.
-                           element format {
-                             element string_value {
-                                 "binary"
-                             }
-                           }
-                        }
-                     )
-                  }|
 		  ## Particles with their locations specified via a python function or from a file. Allows particle arrays to be added.
                   element particle_array {
                      attribute name { xsd:string },
@@ -356,49 +336,55 @@ start =
                      element number_of_particles {
                         integer
                      },
-                     (
-                        ## Create particles which move with the fluid velocity.
-                        element lagrangian {
-                           empty
-                        }
-                     ),
-                     (
-                        ## Python function prescribing dimensional vector input. Functions should be of the form:
-                        ##
-                        ##  def val(t):
-                        ##     # Function code
-                        ##     return # Return value
-                        ##
-                        ## The return value must have length number_of_particles.
-                        ##
-                        ## *** IMPORTANT NOTE ***
-                        ##
-                        ## The t argument is for future use only - currently particle locations are only set at simulation start.
-                        element python {
-                          python_code
-                        }|
-                        ## File containing the particle positions in binary form
-                        element from_file {
-                           attribute file_name { xsd:string },
-                           ## The format of the input file containing field data.
-                           element format {
-                             element string_value {
-                                 "binary"
+		     (
+		       ##Initial position of particles
+		       element initial_position {
+                          ## Python function prescribing dimensional vector input. Functions should be of the form:
+                          ##
+                          ##  def val(t):
+                          ##     # Function code
+                          ##     return # Return value
+                          ##
+                          ## The return value must have length number_of_particles.
+                          ##
+                          ## *** IMPORTANT NOTE ***
+                          ##
+                          ## The t argument is for future use only - currently particle locations are only set at simulation start.
+                          element python {
+                             python_code
+                          }|
+                          ## File containing the particle positions in binary form
+                          element from_file {
+                             attribute file_name { xsd:string },
+                             ## The format of the input file containing field data.
+                             element format {
+                                element string_value {
+                                   "binary"
+                             	}
                              }
-                           }
-                        }|
-                        ## File containing the particle positions in binary form
-                        element from_checkpoint_file {
-                           attribute file_name { xsd:string },
-                           ## The format of the input file containing field data.
-                           element format {
-                              element string_value {
-                                 "binary"
-                              }
-                           }
-                        }
-                     )
-                  }
+                          }|
+                          ## File containing the particle positions in binary form
+                          element from_checkpoint_file {
+                             attribute file_name { xsd:string },
+                             ## The format of the input file containing field data.
+                             element format {
+                                element string_value {
+                                   "binary"
+                              	}
+                             }
+			  }
+                       } 
+                     ),
+		     (
+		       ##Define particle attributes
+		       element attributes {
+		       	  element attribute {
+		             attribute name { xsd:string },
+			     generic_particle_field
+			  }+
+		       }?
+		     )
+                  }+
 	    )*,
 	    (
                ## By default Fluidity will fail if a particle has left the domain.
@@ -418,7 +404,7 @@ start =
             element move_with_mesh {
                empty
             }?,
-            lagrangian_timestepping?
+            lagrangian_timestepping
          }?,
          ## Options dealing with time discretisation
          element timestepping {
@@ -3756,7 +3742,7 @@ generic_particle_field =
    }|
    ## File containing the particle positions in binary form
    element from_checkpoint_file {
-      attribute name { string },
+      attribute file_name { xsd:string },
        ## The format of the input file containing field data.
        element format {
           element string_value {
@@ -3792,10 +3778,7 @@ scalar_field_choice =
                }|
                element aliased {
                   generic_aliased_field
-               }|
-	       element particles {
-	       	  generic_particle_field
-	       }
+               }
             )
          }|
          ## Prognostic scalar fields below this

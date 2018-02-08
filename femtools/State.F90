@@ -1652,11 +1652,7 @@ contains
           ewrite(-1,*) "i: ", i, " -- ", state%scalar_names(i)
         end do
       end if
-      !if (have_option(trim(name)//"/particles")) then  !!fix this to make it work
-      !   return
-      !else
          FLExit(trim(name)//" is not a field name in this state")
-      !end if
     end if
 
   end function extract_from_one_scalar_field

@@ -177,9 +177,9 @@ contains
     integer :: nints, realsize, dimen, total_num_det, number_total_columns
     real, dimension(:), allocatable :: buffer
 
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles
-    integer :: lagrangian_particle, particle_arrays, array_particles
+    integer :: particle_arrays, array_particles
 
     ewrite(1, *) "Checkpointing detectors"
 
@@ -206,19 +206,16 @@ contains
     end do
 
     !Particles
-    lagrangian_particle = option_count("/particles/single_particle")
     particle_arrays = option_count("/particles/particle_array")
     array_particles = 0
 
     do i = 1, particle_arrays
        path = "/particles/particle_array[" // int2str(i - 1) // "]"
-       if(have_option(trim(path) // "/lagrangian")) then  !will always have this for particles
-          call get_option(trim(path) // "/number_of_particles", j)
-          array_particles = array_particles + j
-       end if
+       call get_option(trim(path) // "/number_of_particles", j)
+       array_particles = array_particles + j
     end do
   
-    total_dete_lag = lagrangian_dete + array_dete_lag + lagrangian_particle + array_particles
+    total_dete_lag = lagrangian_dete + array_dete_lag + array_particles
     if(total_dete_lag == 0) then
       ewrite(1, *) "No Lagrangian detectors - not checkpointing detectors"
       ewrite(1, *) "Exiting checkpoint_detectors"
@@ -269,17 +266,11 @@ contains
 
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
 
     total_num_det = 0
@@ -338,8 +329,8 @@ contains
     character(len = FIELD_NAME_LEN), dimension(:), allocatable :: type_detectors
     character(len = 254) :: temp_string
 
-    integer :: lagrangian_particle, python_particles_func
-    integer :: nphases, p, nfields, f
+    integer :: python_particles_func
+    integer :: narrays, p, nattributes, f
     logical :: particles_c, particles_p
 
     static_dete = option_count("/io/detectors/static_detector")
@@ -347,7 +338,6 @@ contains
     python_functions_or_files = option_count("/io/detectors/detector_array")
     python_or_file_dete = 0
 
-    lagrangian_particle = option_count("/particles/single_particle")
     python_particles_func = option_count("/particles/particle_array")
     
 
@@ -415,9 +405,6 @@ contains
        ewrite(1,*) 'In update_detectors_options'
        ewrite(1,*) temp_string
        
-       ewrite(1,*) 'In update_detectors_options'
-       ewrite(1,*) temp_string
-       
        call set_option("/io/detectors/detector_array::" // trim(temp_string) // "/number_of_detectors/", &
             & default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete), stat = stat) 
        
@@ -425,9 +412,6 @@ contains
        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete)
        
        assert(any(stat == (/SPUD_NO_ERROR, SPUD_NEW_KEY_WARNING/)))
-       
-       ewrite(1,*) 'In update_detectors_options'
-       ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete)
        
        if (type_detectors(i+1)=='LAGRANGIAN') then
           call add_option("/io/detectors/detector_array::" // trim(temp_string) // "/lagrangian", stat = stat) 
@@ -450,72 +434,48 @@ contains
        end if
     end do
     deallocate(type_detectors)
+    
     !particle options
-    do i = 0, lagrangian_particle-1  
-       call delete_option("/particles/single_particle[" // int2str(0) // "]")
-    end do
-
-    do i = 0, lagrangian_particle-1
-
-       temp_string=default_stat%detector_group_names(i+1+static_dete+lagrangian_dete+python_functions_or_files)
-        
-       call set_option_attribute("/particles/single_particle::" // trim(temp_string) // "/from_checkpoint_file/file_name", trim(filename), stat)
-
-        if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING .and. stat /= SPUD_ATTR_SET_FAILED_WARNING) then
-            FLAbort("Failed to set particles options filename when checkpointing particles with option path " // "/particles/single_particle")
-        end if
-
-        call set_option("/particles/single_particle::" // trim(temp_string) // "/from_checkpoint_file/format/", trim(format), stat)
-
-        if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING) then
-            FLAbort("Failed to set particles options format when checkpointing particles with option path " // "/particles/single_particle")
-        end if  
-    end do
-
     allocate(type_detectors(python_particles_func))
 
     do i = 0, python_particles_func-1  
-
-         if (have_option("/particles/particle_array[" // int2str(0) // "]"//"/lagrangian")) then  !!will always be lagrangian
-             type_detectors(i+1)='LAGRANGIAN'
-         else
-             type_detectors(i+1)='STATIC'
-         end if
-
-         call delete_option("/particles/particle_array[" // int2str(0) // "]")
-
+         type_detectors(i+1)='LAGRANGIAN'
+         call delete_option("/particles/particle_array[" // int2str(i) // "]/initial_position")
+         call delete_option("/particles/particle_array[" // int2str(i) // "]/number_of_particles")
+         nattributes = option_count('/particles/particle_array['//int2str(i)//']/attributes/attribute')
+         do f = 0,nattributes-1
+            if (have_option('/particles/particle_array['//int2str(i)//']/attributes/attribute['//int2str(f)//']/constant')) then
+               call delete_option('/particles/particle_array['&
+                    //int2str(i)//']/attributes/attribute['//int2str(f)//']/constant')
+               call set_option_attribute('/particles/particle_array['&
+                    //int2str(i)//']/attributes/attribute['//int2str(f)//']/from_checkpoint_file/file_name', trim(filename), stat)
+               call set_option('/particles/particle_array['&
+                    //int2str(p)//']/attributes/attribute['//int2str(f)//']/from_checkpoint_file/format/', trim(format), stat)
+            end if
+         end do
     end do
 
     do i = 0, python_particles_func-1  
-        temp_string=default_stat%detector_group_names(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)
+        temp_string=default_stat%detector_group_names(i+1+static_dete+lagrangian_dete+python_functions_or_files)
 
         ewrite(1,*) 'In update_particles_options'
         ewrite(1,*) temp_string
 
-        ewrite(1,*) 'In update_particles_options'
-        ewrite(1,*) temp_string
-
-        call set_option("/particles/particle_array::" // trim(temp_string) // "/number_of_particles/", &
-                & default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle), stat = stat) 
+        call set_option("/particles/particle_array["//int2str(i)//"]/number_of_particles/", &
+                & default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files), stat = stat) 
 
         ewrite(1,*) 'In update_particles_options'
-        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)
+        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files)
 
         assert(any(stat == (/SPUD_NO_ERROR, SPUD_NEW_KEY_WARNING/)))
 
-        ewrite(1,*) 'In update_particles_options'
-        ewrite(1,*) default_stat%number_det_in_each_group(i+1+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)
-        
-        call add_option("/particles/particle_array::" // trim(temp_string) // "/lagrangian", stat = stat) 
-        assert(any(stat == (/SPUD_NO_ERROR, SPUD_NEW_KEY_WARNING/)))
-
-        call set_option_attribute("/particles/particle_array::" // trim(temp_string) // "/from_checkpoint_file/file_name", trim(filename), stat)
+        call set_option_attribute("/particles/particle_array["//int2str(i)//"]/initial_position/from_checkpoint_file/file_name", trim(filename), stat)
 
         if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING .and. stat /= SPUD_ATTR_SET_FAILED_WARNING) then
             FLAbort("Failed to set particles options filename when checkpointing particles with option path " // "/particles/particle_array")
         end if
 
-        call set_option("/particles/particle_array::" // trim(temp_string) // "/from_checkpoint_file/format/", trim(format), stat)
+        call set_option("/particles/particle_array["//int2str(i)//"]/initial_position/from_checkpoint_file/format/", trim(format), stat)
 
         if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING) then
             FLAbort("Failed to set particles options format when checkpointing particles with option path " // "/particles/particle_array")
@@ -524,47 +484,6 @@ contains
      
 
     deallocate(type_detectors)
-
-    !!change option path of particle scalar fields
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles_c = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles/constant')
-          particles_p = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles/python')
-          if (particles_c) then
-             call delete_option('/material_phase['// &
-                  int2str(p)//']/scalar_field['//int2str(f)//']/particles/constant')
-             call set_option_attribute('/material_phase['// &
-                  int2str(p)//']/scalar_field['//int2str(f)//']/particles/from_checkpoint_file/file_name', trim(filename), stat)
-             if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING .and. stat /= SPUD_ATTR_SET_FAILED_WARNING) then
-                FLAbort('Failed to set scalar field particles filename when checkpointing with option path /material_phase/scalar_field/particles/constant')
-             end if
-             call set_option('/material_phase['// &
-                  int2str(p)//']/scalar_field['//int2str(f)//']/particles/from_checkpoint_file/format/', trim(format), stat)
-             if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING) then
-                FLAbort('Failed to set scalar field particles options format when checkpointing with option path /material_phase/scalar_field/particles/constant')
-             end if
-          end if
-          if (particles_p) then
-             call delete_option('/material_phase['// &
-                  int2str(p)//']/scalar_field['//int2str(f)//']/particles/python')
-             call set_option_attribute('/material_phase['// &
-                  int2str(p)//']/scalar_field['//int2str(f)//']/particles/from_checkpoint_file/file_name', trim(filename), stat)
-             if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING .and. stat /= SPUD_ATTR_SET_FAILED_WARNING) then
-                FLAbort('Failed to set scalar field particles filename when checkpointing with option path /material_phase/scalar_field/particles/python')
-             end if
-             call set_option('/material_phase['// &
-                  int2str(p)//']/scalar_field['//int2str(f)//']/particles/from_checkpoint_file/format/', trim(format), stat)
-             if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING) then
-                FLAbort('Failed to set scalar field particles options format when checkpointing with option path /material_phase/scalar_field/particles/python')
-             end if
-          end if 
-       end do
-    end do
 
   end subroutine update_detectors_options
 

@@ -549,7 +549,7 @@ contains
 
     type(scalar_field), pointer :: sfield
     character(len=FIELD_NAME_LEN) :: name
-    integer :: phase, i, j, nfields, narray, nprescribed, ndiagnostic, nprognostic
+    integer :: phase, i, j, nfields
     integer :: dim, p, f, stat, num_fields, k
     logical :: particles_f
 
@@ -577,25 +577,20 @@ contains
     allocate(fields(size(field_name)))
     do phase=1,size(state)
        nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
+            //int2str(phase-1)//']/scalar_field')
        do f = 1, nfields
-          particles_f = have_option('/material_phase[' &
-               //int2str(p-1)//']/scalar_field['//int2str(f-1)//']/particles')
-          if (.not.particles_f) then
-             call get_option('material_phase['//int2str(phase-1)//']/scalar_field['//int2str(f-1)//']/name', name)
-             sfield => extract_scalar_field(state(phase),name)
-             if (have_option(trim(sfield%option_path)//"/prescribed/particles/include_in_particles").or. &
-                  have_option(trim(sfield%option_path)//"/diagnostic/particles/include_in_particles").or. &
-                  have_option(trim(sfield%option_path)//"/prognostic/particles/include_in_particles")) then
-                
-                value = detector_value(sfield, detector)  
-                do j=1,size(field_name)
-                   if (name==field_name(j)) then
-                      fields(j) = value
-                      num_fields = num_fields+1
-                   end if
-                end do
-             end if
+          call get_option('material_phase['//int2str(phase-1)//']/scalar_field['//int2str(f-1)//']/name', name)
+          sfield => extract_scalar_field(state(phase),name)
+          if (have_option(trim(sfield%option_path)//"/prescribed/particles/include_in_particles").or. &
+               have_option(trim(sfield%option_path)//"/diagnostic/particles/include_in_particles").or. &
+               have_option(trim(sfield%option_path)//"/prognostic/particles/include_in_particles")) then
+             value = detector_value(sfield, detector)  
+             do j=1,size(field_name)
+                if (name==field_name(j)) then
+                   fields(j) = value
+                   num_fields = num_fields+1
+                end if
+             end do
           end if
        end do
     end do

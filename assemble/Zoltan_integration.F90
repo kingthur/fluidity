@@ -1913,7 +1913,7 @@ module zoltan_integration
     logical do_broadcast
     type(element_type), pointer :: shape
     
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles   
 
     ewrite(1,*) "In update_detector_list_element"
@@ -1922,17 +1922,11 @@ module zoltan_integration
     
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
     
     do j = 1, size(detector_list_array)
@@ -2080,7 +2074,7 @@ module zoltan_integration
     type(detector_list_ptr), dimension(:), pointer :: detector_list_array => null()
     type(detector_type), pointer :: detector => null(), add_detector => null()
 
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles
 
     ewrite(1,*) 'in transfer_fields'
@@ -2117,17 +2111,11 @@ module zoltan_integration
     !
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
     
     zoltan_global_ndims = zoltan_global_zz_positions%dim

@@ -139,7 +139,7 @@ contains
     integer :: attribute_dims
     real, allocatable :: send_buff(:), recv_buff(:)
     type(element_type), pointer :: shape
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles
 
     ewrite(2,*) "In distribute_detectors"  
@@ -147,18 +147,13 @@ contains
     xfield => extract_vector_field(state,"Coordinate")
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
+
 
     ! We allocate a point-to-point sendlist for every processor
     nprocs=getnprocs()
@@ -341,7 +336,7 @@ contains
     integer, dimension(:), allocatable :: sendRequest, status
     integer :: attribute_dims
     logical :: have_update_vector
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles
 
     ewrite(2,*) "In exchange_detectors"  
@@ -355,17 +350,11 @@ contains
 
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
     allocate( sendRequest(nprocs) )
     sendRequest = MPI_REQUEST_NULL

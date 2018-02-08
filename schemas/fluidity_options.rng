@@ -404,31 +404,7 @@ NOTE: Requires -v2</a:documentation>
         <element name="particles">
           <a:documentation>Particle options</a:documentation>
           <zeroOrMore>
-            <choice>
-              <element name="single_particle">
-                <a:documentation>A single lagrangian particle</a:documentation>
-                <attribute name="name">
-                  <data type="string"/>
-                </attribute>
-                <choice>
-                  <element name="location">
-                    <a:documentation>This is the initial location of a particle that moves with the fluid velocity.</a:documentation>
-                    <ref name="real_dim_vector"/>
-                  </element>
-                  <element name="from_checkpoint_file">
-                    <a:documentation>File containing the particle positions in binary form</a:documentation>
-                    <attribute name="file_name">
-                      <data type="string"/>
-                    </attribute>
-                    <element name="format">
-                      <a:documentation>The format of the input file containing field data.</a:documentation>
-                      <element name="string_value">
-                        <value>binary</value>
-                      </element>
-                    </element>
-                  </element>
-                </choice>
-              </element>
+            <oneOrMore>
               <element name="particle_array">
                 <a:documentation>Particles with their locations specified via a python function or from a file. Allows particle arrays to be added.</a:documentation>
                 <attribute name="name">
@@ -438,13 +414,11 @@ NOTE: Requires -v2</a:documentation>
                   <a:documentation>The number of particles prescribed by the python function.</a:documentation>
                   <ref name="integer"/>
                 </element>
-                <element name="lagrangian">
-                  <a:documentation>Create particles which move with the fluid velocity.</a:documentation>
-                  <empty/>
-                </element>
-                <choice>
-                  <element name="python">
-                    <a:documentation>Python function prescribing dimensional vector input. Functions should be of the form:
+                <element name="initial_position">
+                  <a:documentation>Initial position of particles</a:documentation>
+                  <choice>
+                    <element name="python">
+                      <a:documentation>Python function prescribing dimensional vector input. Functions should be of the form:
 
  def val(t):
     # Function code
@@ -455,35 +429,49 @@ The return value must have length number_of_particles.
 *** IMPORTANT NOTE ***
 
 The t argument is for future use only - currently particle locations are only set at simulation start.</a:documentation>
-                    <ref name="python_code"/>
-                  </element>
-                  <element name="from_file">
-                    <a:documentation>File containing the particle positions in binary form</a:documentation>
-                    <attribute name="file_name">
-                      <data type="string"/>
-                    </attribute>
-                    <element name="format">
-                      <a:documentation>The format of the input file containing field data.</a:documentation>
-                      <element name="string_value">
-                        <value>binary</value>
+                      <ref name="python_code"/>
+                    </element>
+                    <element name="from_file">
+                      <a:documentation>File containing the particle positions in binary form</a:documentation>
+                      <attribute name="file_name">
+                        <data type="string"/>
+                      </attribute>
+                      <element name="format">
+                        <a:documentation>The format of the input file containing field data.</a:documentation>
+                        <element name="string_value">
+                          <value>binary</value>
+                        </element>
                       </element>
                     </element>
-                  </element>
-                  <element name="from_checkpoint_file">
-                    <a:documentation>File containing the particle positions in binary form</a:documentation>
-                    <attribute name="file_name">
-                      <data type="string"/>
-                    </attribute>
-                    <element name="format">
-                      <a:documentation>The format of the input file containing field data.</a:documentation>
-                      <element name="string_value">
-                        <value>binary</value>
+                    <element name="from_checkpoint_file">
+                      <a:documentation>File containing the particle positions in binary form</a:documentation>
+                      <attribute name="file_name">
+                        <data type="string"/>
+                      </attribute>
+                      <element name="format">
+                        <a:documentation>The format of the input file containing field data.</a:documentation>
+                        <element name="string_value">
+                          <value>binary</value>
+                        </element>
                       </element>
                     </element>
+                  </choice>
+                </element>
+                <optional>
+                  <element name="attributes">
+                    <a:documentation>Define particle attributes</a:documentation>
+                    <oneOrMore>
+                      <element name="attribute">
+                        <attribute name="name">
+                          <data type="string"/>
+                        </attribute>
+                        <ref name="generic_particle_field"/>
+                      </element>
+                    </oneOrMore>
                   </element>
-                </choice>
+                </optional>
               </element>
-            </choice>
+            </oneOrMore>
           </zeroOrMore>
           <choice>
             <element name="fail_outside_domain">
@@ -507,9 +495,7 @@ The t argument is for future use only - currently particle locations are only se
               <empty/>
             </element>
           </optional>
-          <optional>
-            <ref name="lagrangian_timestepping"/>
-          </optional>
+          <ref name="lagrangian_timestepping"/>
         </element>
       </optional>
       <element name="timestepping">
@@ -4821,8 +4807,8 @@ where X is a tuple of length geometry dimension.</a:documentation>
       </element>
       <element name="from_checkpoint_file">
         <a:documentation>File containing the particle positions in binary form</a:documentation>
-        <attribute name="name">
-          <data type="string" datatypeLibrary=""/>
+        <attribute name="file_name">
+          <data type="string"/>
         </attribute>
         <element name="format">
           <a:documentation>The format of the input file containing field data.</a:documentation>
@@ -4864,9 +4850,6 @@ where X is a tuple of length geometry dimension.</a:documentation>
           </element>
           <element name="aliased">
             <ref name="generic_aliased_field"/>
-          </element>
-          <element name="particles">
-            <ref name="generic_particle_field"/>
           </element>
         </choice>
       </element>

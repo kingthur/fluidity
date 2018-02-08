@@ -6,7 +6,6 @@
 !    Applied Modelling and Computation Group
 !    Department of Earth Science and Engineering
 !    Imperial College London
-!
 !    amcgsoftware@imperial.ac.uk
 !    
 !    This library is free software; you can redistribute it and/or
@@ -1396,7 +1395,7 @@ contains
     real, dimension(attribute_dims) :: attributes
     real, dimension(attribute_dims), intent(in), optional :: attribute_vals
 
-    integer :: nphases, p, nfields, f, i, j, k
+    integer :: narrays, p, nattributes, f, i, j, k
     logical :: particles_c, particles_p, particles_f
     real :: const, attribute, time, dt
     character(len=PYTHON_FUNC_LEN) :: func
@@ -1445,37 +1444,38 @@ contains
           detector%attributes=attribute_vals
        else !Get attribute vals from input
           i=1
-          nphases = option_count('/material_phase')
-          do p = 0, nphases-1
-             nfields = option_count('/material_phase[' &
-                  //int2str(p)//']/scalar_field')
-             do f = 0,nfields-1
-                particles_c = have_option('/material_phase['// &
-                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/constant')
-                particles_p = have_option('/material_phase['// &
-                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/python')
-                particles_f = have_option('/material_phase['// &
-                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields')
+          narrays = option_count('/particles/particle_array')
+          do p = 0, narrays-1
+             nattributes = option_count('/particles/particle_array['&
+                  //int2str(p)//']/attributes/attribute')
+             do f = 0,nattributes-1
+                particles_c = have_option('/particles/particle_array['// &
+                     int2str(p)//']/attributes/attribute['//int2str(f)//']/constant')
+                particles_p = have_option('/particles/particle_array['// &
+                     int2str(p)//']/attributes/attribute['//int2str(f)//']/python')
+                particles_f = have_option('/particles/particle_array['// &
+                     int2str(p)//']/attributes/attribute['//int2str(f)//']/python_fields')
                 if (particles_c) then
-                   call get_option('/material_phase['// &
-                     int2str(p)//']/scalar_field['//int2str(f)//']/particles/constant', const)
+                   call get_option('/particles/particle_array['// &
+                        int2str(p)//']/attributes/attribute['//int2str(f)//']/constant', const)
                    detector%attributes(i)=const
                    i=i+1
                 else if (particles_p) then
-                   call get_option('/material_phase['// &
-                        int2str(p)//']/scalar_field['//int2str(f)//']/particles/python', func)
+                   call get_option('/particles/particle_array['// &
+                        int2str(p)//']/attributes/attribute['//int2str(f)//']/python', func)
                    call set_particle_attribute_from_python(attribute, position, func, time)
                    detector%attributes(i)=attribute
                    i=i+1
                 else if (particles_f) then
-                   call get_option('/material_phase['// &
-                        int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields', func)
-                   j=option_count('/material_phase['// &
-                        int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields/field_name')
+                   call get_option('/particles/particle_array['// &
+                        int2str(p)//']/attributes/attribute['//int2str(f)//']/python_fields', func)
+                   j=option_count('/particles/particle_array['// &
+                        int2str(p)//']/attributes/attribute['//int2str(f)//']/python_fields/field_name')
                    allocate(field_name(j))
                    do k=0,j-1
-                       call get_option('/material_phase['// &
-                            int2str(p)//']/scalar_field['//int2str(f)//']/particles/python_fields/field_name['//int2str(k)//']/name', field_name(k+1))
+                       call get_option('/particles/particle_array['// &
+                            int2str(p)//']/attributes/attribute['//int2str(f)// &
+                            ']/python_fields/field_name['//int2str(k)//']/name', field_name(k+1))
                    end do
                    call set_particle_fields_from_python(state, detector, attribute, func, time, field_name)
                    detector%attributes(i)=attribute
@@ -1511,9 +1511,8 @@ contains
     real:: current_time
     character(len = OPTION_PATH_LEN) :: detectors_cp_filename, detector_file_filename
     integer :: attribute_dims
-    integer :: attribute_dims2
 
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles
     character(len=OPTION_PATH_LEN) :: name
 
@@ -1536,30 +1535,13 @@ contains
     python_functions_or_files = option_count("/io/detectors/detector_array")
     python_dete = 0
 
-    ! Loop over all fields in state and record the ones we want to output
-    do phase=1,size(state) !loop phases
-       material_phase_name=trim(state(phase)%name)
-       ! Count the scalar fields to include in particles
-       do i = 1, size(state(phase)%scalar_names) !loop sfields
-          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(i))
-          if (sfield%option_path=="".or.aliased(sfield)) then
-             cycle
-          end if
-       end do
-    end do
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
     
     do i=1,python_functions_or_files
@@ -1572,7 +1554,6 @@ contains
     total_dete_groups=static_dete+lagrangian_dete+python_functions_or_files
 
     !!!Particle options
-    lagrangian_particle = option_count("/particles/single_particle")
     python_particles_func = option_count("/particles/particle_array")
     python_particle = 0
     
@@ -1582,8 +1563,8 @@ contains
        python_particle=python_particle+j
     end do
 
-    total_particles = lagrangian_particle+python_particle
-    total_particle_groups=lagrangian_particle+python_particles_func
+    total_particles = python_particle
+    total_particle_groups= python_particles_func
 
     !combine both
     default_stat%detector_list%total_num_det=total_dete+total_particles
@@ -1621,7 +1602,6 @@ contains
     if (have_option("/io/detectors/static_detector/from_checkpoint_file").or. & 
          & have_option("/io/detectors/lagrangian_detector/from_checkpoint_file").or. &
          & have_option("/io/detectors/detector_array/from_checkpoint_file").or. &
-         & have_option("/particles/single_particle/from_checkpoint_file").or. &
          & have_option("/particles/particle_array/from_checkpoint_file")) then
        default_stat%from_checkpoint=.true.
     else
@@ -1738,31 +1718,8 @@ contains
           end if
        end do
 
-       ! Read detectors from options
+       ! Read particles from options
        ewrite(2,*) "Reading particles from options"
-
-       ! Read all single particles from options
-       do i=1,lagrangian_particle
-          ! Read detectors from options
-          write(buffer, "(a,i0,a)") "/particles/single_particle[",i-1,"]"
-          ! Read detectors from options
-
-          shape_option=option_shape(trim(buffer)//"/location")
-          assert(xfield%dim==shape_option(1))
-          ! Read detectors from options
-          call get_option(trim(buffer)//"/location", detector_location)
-          
-          call get_option(trim(buffer)//"/name", detector_name)
-          default_stat%detector_group_names(i+static_dete+lagrangian_dete+python_functions_or_files)=detector_name
-          default_stat%number_det_in_each_group(i+static_dete+lagrangian_dete+python_functions_or_files)=1.0
-          default_stat%detector_list%detector_names(k-1+i)=detector_name
-
-          call create_single_detector(default_stat%detector_list, xfield, &
-               detector_location, attribute_dims, k-1+i, LAGRANGIAN_DETECTOR, &
-               trim(detector_name), current_time, state)
-       end do
-
-       k=k+lagrangian_particle
 
        do i=1,python_particles_func
           write(buffer, "(a,i0,a)") "/particles/particle_array[",i-1,"]"
@@ -1771,20 +1728,15 @@ contains
           call get_option(trim(buffer)//"/number_of_particles", ndete)
           str_size=len_trim(int2str(ndete))
           fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
+          type_det=LAGRANGIAN_DETECTOR
 
-          if (have_option(trim(buffer)//"/lagrangian")) then
-             type_det=LAGRANGIAN_DETECTOR
-          else
-             type_det=STATIC_DETECTOR
-          end if
+          default_stat%detector_group_names(i+static_dete+lagrangian_dete+python_functions_or_files)=trim(funcnam)
+          default_stat%number_det_in_each_group(i+static_dete+lagrangian_dete+python_functions_or_files)=ndete
 
-          default_stat%detector_group_names(i+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)=trim(funcnam)
-          default_stat%number_det_in_each_group(i+static_dete+lagrangian_dete+python_functions_or_files+lagrangian_particle)=ndete
-
-          if (.not.have_option(trim(buffer)//"/from_file")) then
+          if (.not.have_option(trim(buffer)//"/initial_position/from_file")) then
 
              ! Reading particles from a python function
-             call get_option(trim(buffer)//"/python", func)
+             call get_option(trim(buffer)//"/initial_position/python", func)
              allocate(coords(dim,ndete))
              call set_detector_coords_from_python(coords, ndete, func, current_time)
           
@@ -1803,7 +1755,7 @@ contains
 
              ! Reading from a binary file where the user has placed the particle positions
              default_stat%detector_file_unit=free_unit()
-             call get_option("/particles/particle_array/from_file/file_name",detector_file_filename)
+             call get_option("/particles/particle_array/initial_position/from_file/file_name",detector_file_filename)
 
 #ifdef STREAM_IO
              open(unit = default_stat%detector_file_unit, file = trim(detector_file_filename), &
@@ -1837,8 +1789,6 @@ contains
           call get_option("/io/detectors/lagrangian_detector/from_checkpoint_file/file_name",detectors_cp_filename)  
        elseif (have_option("/io/detectors/detector_array/")) then
           call get_option("/io/detectors/detector_array/from_checkpoint_file/file_name",detectors_cp_filename)
-       elseif (have_option("/particles/single_particle")) then
-          call get_option("/particles/single_particle/from_checkpoint_file/file_name",detectors_cp_filename)
        else
           call get_option("/particles/particle_array/from_checkpoint_file/file_name",detectors_cp_filename)
        end if 
@@ -1939,27 +1889,6 @@ contains
        end do
 
        !Read in particle locations from checkpoint file
-       do j=1,size(default_stat%detector_group_names)
-          do i=1,lagrangian_particle
-             write(buffer, "(a,i0,a)") "/particles/single_particle[",i-1,"]"
-             call get_option(trim(buffer)//"/name", temp_name)
-             if (default_stat%detector_group_names(j)==temp_name) then
-                read(default_stat%detector_checkpoint_unit) packed_buff
-                detector_location=packed_buff(1:dim)
-                if (attribute_dims.NE.0) then
-                   attribute_vals=packed_buff(dim+1:dim+attribute_dims)
-                end if
-                call create_single_detector(default_stat%detector_list, xfield, &
-                     detector_location, attribute_dims, k+i-1, LAGRANGIAN_DETECTOR, &
-                     trim(temp_name), current_time, state, attribute_vals)
-                default_stat%detector_list%detector_names(k+i-1)=trim(temp_name)
-             else
-                cycle
-             end if
-          end do
-       end do
-
-       k=k+lagrangian_particle
 
        do j=1,size(default_stat%detector_group_names) 
           do i=1,python_particles_func
@@ -1970,12 +1899,7 @@ contains
                 call get_option(trim(buffer)//"/number_of_particles", ndete)
                 str_size=len_trim(int2str(ndete))
                 fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
-
-                if (have_option(trim(buffer)//"/lagrangian")) then
-                   type_det=LAGRANGIAN_DETECTOR  !!!will always be lagrangian so remove?
-                else
-                   type_det=STATIC_DETECTOR
-                end if
+                type_det=LAGRANGIAN_DETECTOR
 
                 do m=1,default_stat%number_det_in_each_group(j)
                    write(detector_name, fmt) trim(temp_name)//"_", m
@@ -2062,12 +1986,12 @@ contains
        ! Next columns contain attributes of particles
        if (attribute_dims.ne.0) then
           attributeloop: do i=1,default_stat%detector_list%total_num_det
-             do p = 0, nphases-1
-                do f = 0,nfields-1
-                   if (have_option('/material_phase['// &
-                        int2str(p)//']/scalar_field['//int2str(f)//']/particles')) then
-                      call get_option('/material_phase['// &
-                        int2str(p)//']/scalar_field['//int2str(f)//']/name', name)
+             do p = 0,narrays-1
+                do f = 0,nattributes-1
+                   if (have_option('/particles/particle_array['&
+                        //int2str(p)//']/attributes/attribute['//int2str(f)//']')) then
+                      call get_option ('/particles/particle_array['&
+                           //int2str(p)//']/attributes/attribute['//int2str(f)//']/name', name)
                       buffer=field_tag(name=default_stat%detector_list%detector_names(i), column=column+1,&
                            statistic=name, components=1)
                       write(default_stat%detector_list%output_unit, '(a)')trim(buffer)
@@ -2077,7 +2001,7 @@ contains
              end do
           end do attributeloop
        end if
-     end if
+    end if
 
      ! Loop over all fields in state and record the ones we want to output
      allocate (default_stat%detector_list%sfield_list(size(state)))
@@ -2178,7 +2102,7 @@ contains
 
     !Get options for lagrangian detector movement
     if (check_any_lagrangian(default_stat%detector_list)) then
-       if (have_option("/particles/lagrangian_timestepping")) then
+       if (have_option("/particles")) then
           call read_detector_move_options(default_stat%detector_list, "/particles")
        else
           call read_detector_move_options(default_stat%detector_list, "/io/detectors")
@@ -2934,24 +2858,18 @@ contains
     type(vector_field), pointer :: vfield
     type(detector_type), pointer :: detector
 
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles
 
     ewrite(1,*) "In write_detectors"
     
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
     
     !Computing the global number of detectors. This is to prevent hanging
@@ -2990,22 +2908,21 @@ contains
              write(detector_list%output_unit, format_buffer, advance="no") &
                   detector%position
           end if
-
           detector => detector%next
        end do positionloop
 
+       
        if (attribute_dims.ne.0) then
           detector => detector_list%first
           attributeloop: do i=1,detector_list%length
              if(detector_list%binary_output) then
                 write(detector_list%output_unit) detector%attributes
              else
-                format_buffer=reals_format(attribute_dims)
+                format_buffer=reals_format(size(detector%attributes))
                 write(detector_list%output_unit, format_buffer, advance="no") &
                      detector%attributes
              end if
              detector => detector%next
-             
           end do attributeloop
        end if
 
@@ -3123,7 +3040,7 @@ contains
     type(vector_field), pointer :: vfield
     type(detector_type), pointer :: node
     
-    integer :: nphases, p, nfields, f
+    integer :: narrays, p, nattributes, f
     logical :: particles
     ewrite(2, *) "In write_mpi_out"
 
@@ -3143,19 +3060,12 @@ contains
     
     !count the number of attributes in particles
     attribute_dims=0
-    nphases = option_count('/material_phase')  
-    do p = 0, nphases-1
-       nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
-       do f = 0,nfields-1
-          particles = have_option('/material_phase['// &
-               int2str(p)//']/scalar_field['//int2str(f)//']/particles')
-          if (particles) then
-             attribute_dims=attribute_dims+1
-          end if
-       end do
+    narrays = option_count('/particles/particle_array')
+    do p = 0, narrays-1
+       nattributes = option_count('/particles/particle_array['&
+            //int2str(p)//']/attributes/attribute')
+       attribute_dims = attribute_dims + nattributes
     end do
-
     
                            ! Time data
     number_total_columns = 2 + &
