@@ -577,10 +577,10 @@ contains
     allocate(fields(size(field_name)))
     do phase=1,size(state)
        nfields = option_count('/material_phase[' &
-            //int2str(p)//']/scalar_field')
+            //int2str(phase-1)//']/scalar_field')
        do f = 1, nfields
           particles_f = have_option('/material_phase[' &
-               //int2str(p-1)//']/scalar_field['//int2str(f-1)//']/particles')
+               //int2str(phase-1)//']/scalar_field['//int2str(f-1)//']/particles')
           if (.not.particles_f) then
              call get_option('material_phase['//int2str(phase-1)//']/scalar_field['//int2str(f-1)//']/name', name)
              sfield => extract_scalar_field(state(phase),name)
