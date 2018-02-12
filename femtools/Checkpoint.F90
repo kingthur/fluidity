@@ -167,7 +167,7 @@ contains
     type(detector_type), pointer :: node
     character(len = OPTION_PATH_LEN) :: detectors_cp_filename, path
     character(len = PREFIX_LEN) :: lpostfix
-    integer :: det_unit, i, j, IERROR, attribute_dims
+    integer :: det_unit, i, j, IERROR
     integer :: static_dete, lagrangian_dete, det_arrays, array_dete_lag, &
       & total_dete_lag
     type(vector_field), pointer :: vfield
@@ -177,7 +177,6 @@ contains
     integer :: nints, realsize, dimen, total_num_det, number_total_columns
     real, dimension(:), allocatable :: buffer
 
-    integer :: narrays, p, nattributes, f
     logical :: particles
     integer :: particle_arrays, array_particles
 
@@ -264,15 +263,6 @@ contains
 
     dimen=vfield%dim
 
-    !count the number of attributes in particles
-    attribute_dims=0
-    narrays = option_count('/particles/particle_array')
-    do p = 0, narrays-1
-       nattributes = option_count('/particles/particle_array['&
-            //int2str(p)//']/attributes/attribute')
-       attribute_dims = attribute_dims + nattributes
-    end do
-
     total_num_det = 0
 
     do i =1, size(default_stat%number_det_in_each_group)
@@ -288,15 +278,15 @@ contains
     location_to_write=0
 
     positionloop_cp: do i=1, default_stat%detector_list%length
-       offset = location_to_write+(node%id_number-1)*(size(node%position)+attribute_dims)*realsize
+       offset = location_to_write+(node%id_number-1)*(size(node%position)+size(node%attributes))*realsize
        ewrite(1,*) "after file set view position IERROR is:", IERROR
 
-       allocate(buffer(size(node%position)+attribute_dims))
+       allocate(buffer(size(node%position)+size(node%attributes)))
        buffer(1:size(node%position))=node%position
-       if (attribute_dims.NE.0) then
-          buffer(1+size(node%position):size(node%position)+attribute_dims)=node%attributes
+       if (size(node%attributes).NE.0) then
+          buffer(1+size(node%position):size(node%position)+size(node%attributes))=node%attributes
        end if
-       nints=size(node%position)+attribute_dims
+       nints=size(node%position)+size(node%attributes)
        
        call MPI_FILE_WRITE_AT(fhdet,offset,buffer,nints,getpreal(),status,IERROR)
        
@@ -330,7 +320,7 @@ contains
     character(len = 254) :: temp_string
 
     integer :: python_particles_func
-    integer :: narrays, p, nattributes, f
+    integer :: p, nattributes, f
     logical :: particles_c, particles_p
 
     static_dete = option_count("/io/detectors/static_detector")

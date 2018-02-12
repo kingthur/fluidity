@@ -136,23 +136,14 @@ contains
     integer :: i,j,k, nprocs, all_send_lists_empty, processor_owner, bcast_count, &
                ierr, ndata_per_det, bcast_rounds, round, accept_detector
     integer, dimension(:), allocatable :: ndets_being_bcast
-    integer :: attribute_dims
+
     real, allocatable :: send_buff(:), recv_buff(:)
     type(element_type), pointer :: shape
-    integer :: narrays, p, nattributes, f
-    logical :: particles
+    integer :: narrays, p, nattributes, f, attribute_dims!!!
 
     ewrite(2,*) "In distribute_detectors"  
 
     xfield => extract_vector_field(state,"Coordinate")
-    !count the number of attributes in particles
-    attribute_dims=0
-    narrays = option_count('/particles/particle_array')
-    do p = 0, narrays-1
-       nattributes = option_count('/particles/particle_array['&
-            //int2str(p)//']/attributes/attribute')
-       attribute_dims = attribute_dims + nattributes
-    end do
 
 
     ! We allocate a point-to-point sendlist for every processor
@@ -232,19 +223,21 @@ contains
        bcast_rounds = maxval(ndets_being_bcast)
        call allmax(bcast_rounds)
        do round=1, bcast_rounds
-          ndata_per_det = detector_buffer_size(xfield%dim, attribute_dims, .false.)
 
           ! Broadcast detectors whose new owner we can't identify
           do i=1,getnprocs()
              if (ndets_being_bcast(i) >= round) then
 
                 if (i == getprocno() .and. bcast_count>=round) then
-                   ! Allocate memory for the detector we're going to send
-                   allocate(send_buff(ndata_per_det))
 
                    ! Pack the first detector from the bcast_list
                    detector=>detector_bcast_list%first
-                   call pack_detector(detector, send_buff(1:ndata_per_det), xfield%dim, attribute_dims)
+                   
+                   ! Allocate memory for the detector we're going to send
+                   ndata_per_det = detector_buffer_size(xfield%dim, size(detector%attributes), .false.)
+                   allocate(send_buff(ndata_per_det))
+                   
+                   call pack_detector(detector, send_buff(1:ndata_per_det), xfield%dim, size(detector%attributes))
                    call delete(detector, detector_bcast_list)
 
                    ! Broadcast the detectors you want to send
@@ -264,8 +257,8 @@ contains
                       ! Unpack detector again and put in a temporary lost_detectors_list
                       shape=>ele_shape(xfield,1)
                       detector=>null()
-                      call allocate(detector, xfield%dim, local_coord_count(shape), attribute_dims)
-                      call unpack_detector(detector, send_buff(1:ndata_per_det), xfield%dim, attribute_dims)
+                      call allocate(detector, xfield%dim, local_coord_count(shape), attribute_dims)!!!
+                      call unpack_detector(detector, send_buff(1:ndata_per_det), xfield%dim, attribute_dims)!!!
                       call insert(detector, lost_detectors_list)
                    end if
 
@@ -282,8 +275,8 @@ contains
                    ! Allocate and unpack the detector
                    shape=>ele_shape(xfield,1)
                    detector=>null()
-                   call allocate(detector, xfield%dim, local_coord_count(shape), attribute_dims)
-                   call unpack_detector(detector, recv_buff(1:ndata_per_det), xfield%dim, attribute_dims)
+                   call allocate(detector, xfield%dim, local_coord_count(shape), attribute_dims)!!!
+                   call unpack_detector(detector, recv_buff(1:ndata_per_det), xfield%dim, attribute_dims)!!!
 
                    ! Try to find the detector position locally
                    call picker_inquire(xfield, detector%position, detector%element, detector%local_coords, global=.false.)
@@ -334,10 +327,8 @@ contains
                halo_level, nprocs, IERROR
     integer, parameter ::TAG=12
     integer, dimension(:), allocatable :: sendRequest, status
-    integer :: attribute_dims
     logical :: have_update_vector
-    integer :: narrays, p, nattributes, f
-    logical :: particles
+    integer :: attribute_dims !!!
 
     ewrite(2,*) "In exchange_detectors"  
 
@@ -348,14 +339,6 @@ contains
     xfield => extract_vector_field(state,"Coordinate")
     dim=xfield%dim
 
-    !count the number of attributes in particles
-    attribute_dims=0
-    narrays = option_count('/particles/particle_array')
-    do p = 0, narrays-1
-       nattributes = option_count('/particles/particle_array['&
-            //int2str(p)//']/attributes/attribute')
-       attribute_dims = attribute_dims + nattributes
-    end do
     allocate( sendRequest(nprocs) )
     sendRequest = MPI_REQUEST_NULL
 
@@ -372,9 +355,9 @@ contains
     have_update_vector=associated(detector_list%move_parameters)
     if(have_update_vector) then
        n_stages=detector_list%move_parameters%n_stages
-       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector,n_stages)
+       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector,n_stages)!!!
     else
-       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector)
+       det_size=detector_buffer_size(dim,attribute_dims,have_update_vector)!!!
     end if
     
     ! Send to all procs
@@ -405,9 +388,9 @@ contains
              detector%element = halo_universal_number(ele_halo, detector%element)
 
              if (have_update_vector) then
-                call pack_detector(detector, send_buffer(target_proc)%ptr(j,1:det_size), dim, attribute_dims, nstages=n_stages)
+                call pack_detector(detector, send_buffer(target_proc)%ptr(j,1:det_size), dim, size(detector%attributes), nstages=n_stages)
              else
-                call pack_detector(detector, send_buffer(target_proc)%ptr(j,1:det_size), dim, attribute_dims)
+                call pack_detector(detector, send_buffer(target_proc)%ptr(j,1:det_size), dim, size(detector%attributes))
              end if
 
              ! delete also advances detector
@@ -452,10 +435,10 @@ contains
           ! back to local detector element
           if (have_update_vector) then
              call unpack_detector(detector_received,recv_buffer(receive_proc)%ptr(j,1:det_size),dim,&
-                    attribute_dims, global_to_local=ele_numbering_inverse,coordinates=xfield,nstages=n_stages)
+                    attribute_dims, global_to_local=ele_numbering_inverse,coordinates=xfield,nstages=n_stages)!!!
           else
              call unpack_detector(detector_received,recv_buffer(receive_proc)%ptr(j,1:det_size),dim,&
-                    attribute_dims, global_to_local=ele_numbering_inverse,coordinates=xfield)
+                    attribute_dims, global_to_local=ele_numbering_inverse,coordinates=xfield)!!!
           end if
           ! If there is a list of detector names, use it, otherwise set ID as name
           if (allocated(detector_list%detector_names)) then

@@ -38,6 +38,7 @@ module detector_tools
   use state_module, only: state_type, extract_scalar_field
   use futils, only: int2str
   use global_parameters, only: OPTION_PATH_LEN, FIELD_NAME_LEN
+  use pickers
   
   implicit none
   
@@ -534,15 +535,18 @@ contains
     end if
   end subroutine set_particle_attribute_from_python
 
-  subroutine set_particle_fields_from_python(state, detector, attribute, func, time, field_name)
-    type(detector_type), pointer, intent(in) :: detector
+  subroutine set_particle_fields_from_python(state, xfield, dim, position, attribute, func, time, field_name)
     type(state_type), dimension(:), intent(in) :: state
     real, intent(inout) :: attribute
     character(len=*), intent(in) :: func
     character(len=*), dimension(:), intent(in) :: field_name
     real, intent(in) :: time
-    real, allocatable, dimension(:) :: position
+    integer, intent(in) :: dim
+    real, dimension(dim), intent(in) :: position
     real, allocatable, dimension(:) :: fields
+    real, dimension(dim+1) :: local_coord
+    type(vector_field), pointer :: xfield
+    integer:: ele
     real :: value
     real :: lvx,lvy,lvz
     character(len=FIELD_NAME_LEN) :: buffer !set len as number
@@ -550,13 +554,10 @@ contains
     type(scalar_field), pointer :: sfield
     character(len=FIELD_NAME_LEN) :: name
     integer :: phase, i, j, nfields
-    integer :: dim, p, f, stat, num_fields, k
+    integer :: p, f, stat, num_fields, k
     logical :: particles_f
 
     !get position of particle for function
-    call get_option("/geometry/dimension",dim)
-    allocate(position(dim))
-    position = detector%position
 
     select case(dim)
     case(1)
@@ -584,7 +585,8 @@ contains
           if (have_option(trim(sfield%option_path)//"/prescribed/particles/include_in_particles").or. &
                have_option(trim(sfield%option_path)//"/diagnostic/particles/include_in_particles").or. &
                have_option(trim(sfield%option_path)//"/prognostic/particles/include_in_particles")) then
-             value = detector_value(sfield, detector)  
+             call picker_inquire(xfield, position, ele, local_coord)
+             value = eval_field(ele, sfield, local_coord)
              do j=1,size(field_name)
                 if (name==field_name(j)) then
                    fields(j) = value

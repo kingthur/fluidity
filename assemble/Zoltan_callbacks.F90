@@ -1027,7 +1027,6 @@ contains
     type(vector_field), pointer :: vfield
     type(tensor_field), pointer :: tfield
     integer :: old_universal_element_number, old_local_element_number, dataSize
-    integer :: attribute_dims
 
     type(detector_type), pointer :: detector => null(), detector_to_delete => null()
 
@@ -1035,15 +1034,6 @@ contains
     logical :: particles
 
     ewrite(1,*) "In zoltan_cb_pack_fields"
-
-    !count the number of attributes in particles
-    attribute_dims=0
-    narrays = option_count('/particles/particle_array')
-    do p = 0, narrays-1
-       nattributes = option_count('/particles/particle_array['&
-            //int2str(p)//']/attributes/attribute')
-       attribute_dims = attribute_dims + nattributes
-    end do
 
     total_det_packed=0
     do i=1,num_ids
@@ -1096,7 +1086,7 @@ contains
 
           ! pack the detector
           call pack_detector(detector, rbuf(rhead:rhead+zoltan_global_ndata_per_det-1), &
-               zoltan_global_ndims, attribute_dims)
+               zoltan_global_ndims, size(detector%attributes))
 
           ! keep a pointer to the detector to delete
           detector_to_delete => detector
@@ -1186,7 +1176,7 @@ contains
     integer :: rhead, i, state_no, field_no, loc, sz, dataSize
     integer :: old_universal_element_number, new_local_element_number
     integer :: ndetectors_in_ele, det, new_ele_owner, total_det_unpacked
-    integer :: attribute_dims
+    integer :: attribute_dims!!!
     type(detector_type), pointer :: detector => null()
     type(element_type), pointer :: shape => null()
 
@@ -1198,12 +1188,12 @@ contains
     total_det_unpacked=0
 
     !count the number of attributes in particles
-    attribute_dims=0
+    attribute_dims=0!!!
     narrays = option_count('/particles/particle_array')
     do p = 0, narrays-1
        nattributes = option_count('/particles/particle_array['&
             //int2str(p)//']/attributes/attribute')
-       attribute_dims = attribute_dims + nattributes
+       attribute_dims = attribute_dims + nattributes!!!
     end do
     
     do i=1,num_ids
@@ -1270,11 +1260,11 @@ contains
           do det=1,ndetectors_in_ele
              ! allocate a detector
              shape=>ele_shape(zoltan_global_new_positions,1)
-             call allocate(detector, zoltan_global_ndims, local_coord_count(shape), attribute_dims)
+             call allocate(detector, zoltan_global_ndims, local_coord_count(shape), attribute_dims)!!!
                    
              ! unpack detector information 
              call unpack_detector(detector, rbuf(rhead:rhead+zoltan_global_ndata_per_det-1), zoltan_global_ndims, attribute_dims, &
-                    global_to_local=zoltan_global_uen_to_new_local_numbering, coordinates=zoltan_global_new_positions)
+                    global_to_local=zoltan_global_uen_to_new_local_numbering, coordinates=zoltan_global_new_positions)!!!
 
              ! Make sure the unpacked detector is in this element
              assert(new_local_element_number==detector%element)

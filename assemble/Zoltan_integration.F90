@@ -1909,25 +1909,13 @@ module zoltan_integration
     integer :: old_local_element_number, new_local_element_number, old_universal_element_number
     integer, allocatable :: ndets_being_sent(:)
     real, allocatable :: send_buff(:,:), recv_buff(:,:)
-    integer :: attribute_dims
     logical do_broadcast
     type(element_type), pointer :: shape
-    
-    integer :: narrays, p, nattributes, f
-    logical :: particles   
+    integer :: attribute_dims !!!
 
     ewrite(1,*) "In update_detector_list_element"
 
     send_count=0
-    
-    !count the number of attributes in particles
-    attribute_dims=0
-    narrays = option_count('/particles/particle_array')
-    do p = 0, narrays-1
-       nattributes = option_count('/particles/particle_array['&
-            //int2str(p)//']/attributes/attribute')
-       attribute_dims = attribute_dims + nattributes
-    end do
     
     do j = 1, size(detector_list_array)
        detector_list => detector_list_array(j)%ptr
@@ -1987,7 +1975,7 @@ module zoltan_integration
     detector => detector_send_list%first
     do i=1,send_count
        ! Pack the detector information and delete from send_list (delete advances detector to detector%next)
-       call pack_detector(detector, send_buff(i, 1:zoltan_global_ndata_per_det), zoltan_global_ndims, attribute_dims)
+       call pack_detector(detector, send_buff(i, 1:zoltan_global_ndata_per_det), zoltan_global_ndims, size(detector%attributes))
        call delete(detector, detector_send_list)
     end do
 
@@ -2014,8 +2002,8 @@ module zoltan_integration
 
                 ! Allocate and unpack the detector
                 shape=>ele_shape(zoltan_global_new_positions,1)                     
-                call allocate(detector, zoltan_global_ndims, local_coord_count(shape), attribute_dims)
-                call unpack_detector(detector, recv_buff(j, 1:zoltan_global_ndata_per_det), zoltan_global_ndims, attribute_dims)
+                call allocate(detector, zoltan_global_ndims, local_coord_count(shape), attribute_dims)!!!
+                call unpack_detector(detector, recv_buff(j, 1:zoltan_global_ndata_per_det), zoltan_global_ndims, attribute_dims)!!!
 
                 if (has_key(zoltan_global_uen_to_new_local_numbering, detector%element)) then 
                    new_local_element_number = fetch(zoltan_global_uen_to_new_local_numbering, detector%element)
@@ -2066,16 +2054,13 @@ module zoltan_integration
     
     integer :: old_universal_element_number, new_local_element_number, old_local_element_number
     integer :: state_no, field_no
-    integer :: attribute_dims
     type(scalar_field), pointer :: source_sfield, target_sfield
     type(vector_field), pointer :: source_vfield, target_vfield
     type(tensor_field), pointer :: source_tfield, target_tfield
 
     type(detector_list_ptr), dimension(:), pointer :: detector_list_array => null()
     type(detector_type), pointer :: detector => null(), add_detector => null()
-
-    integer :: narrays, p, nattributes, f
-    logical :: particles
+    integer :: attribute_dims !!!
 
     ewrite(1,*) 'in transfer_fields'
     
@@ -2107,19 +2092,9 @@ module zoltan_integration
     ! allocate array for storing the number of detectors in each of the elements to be transferred
     allocate(zoltan_global_ndets_in_ele(num_export))
     zoltan_global_ndets_in_ele(:) = 0
-
-    !
-    !count the number of attributes in particles
-    attribute_dims=0
-    narrays = option_count('/particles/particle_array')
-    do p = 0, narrays-1
-       nattributes = option_count('/particles/particle_array['&
-            //int2str(p)//']/attributes/attribute')
-       attribute_dims = attribute_dims + nattributes
-    end do
     
     zoltan_global_ndims = zoltan_global_zz_positions%dim
-    zoltan_global_ndata_per_det = detector_buffer_size(zoltan_global_ndims, attribute_dims, .false.)
+    zoltan_global_ndata_per_det = detector_buffer_size(zoltan_global_ndims, attribute_dims, .false.)!!!
     ewrite(2,*) "Amount of data to be transferred per detector: ", zoltan_global_ndata_per_det
     
     head = 1
