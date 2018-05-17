@@ -9,10 +9,11 @@ pipeline {
             steps {
                 script {
                     def version = sh script: 'git rev-parse --short HEAD | tr -d "\n"', returnStdout: true
-                    def imageName = "icokpy"
+                    def imageName = "fluidity"
                     def imageTag = "${env.BUILD_NUMBER}_${version}"
+                    def osBase = "ubuntu"
+                    sh "cp docker/Dockerfile-${osBase} Dockerfile"
                     def fluidityImage = docker.build("${imageName}:${imageTag}")
-
                     fluidityImage.inside() {
                         sh 'make unittest'
                     }
