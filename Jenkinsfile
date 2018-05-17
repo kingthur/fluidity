@@ -5,7 +5,7 @@ pipeline {
     }
     stages {
         stage('Building') {
-          agent { label 'azure-linux' }
+            agent { label 'azure-linux' }
             steps {
                 sh 'true'
             }
