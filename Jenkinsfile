@@ -12,7 +12,7 @@ pipeline {
                     def imageName = "fluidity"
                     def imageTag = "${env.BUILD_NUMBER}_${version}"
                     def osBase = "ubuntu"
-                    sh "cp docker/Dockerfile-${osBase} Dockerfile"
+                    sh "cp docker/Dockerfile.${osBase} Dockerfile"
                     def fluidityImage = docker.build("${imageName}:${imageTag}")
                     fluidityImage.inside() {
                         sh 'make unittest'
